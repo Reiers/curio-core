@@ -1,6 +1,8 @@
 package doctor
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,6 +19,11 @@ type Check struct {
 
 func Run(homeDir, dataDir string) ([]Check, error) {
 	checks := []Check{checkAria2c(), checkDisk(homeDir), checkWritable(dataDir)}
+	return checks, nil
+}
+
+func RunPostImport(dataDir string) ([]Check, error) {
+	checks := []Check{checkChainHead(dataDir), checkBlockstorePopulated(dataDir), checkStateRootReachable(dataDir)}
 	return checks, nil
 }
 
@@ -58,4 +65,52 @@ func checkWritable(dataDir string) Check {
 	}
 	_ = os.Remove(testPath)
 	return Check{Name: "data-dir-writable", OK: true, Message: fmt.Sprintf("data dir is writable: %s", dataDir)}
+}
+
+func checkChainHead(dataDir string) Check {
+	headFile := filepath.Join(dataDir, "chainstore", "head.json")
+	b, err := os.ReadFile(headFile)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Check{Name: "chain-head-exists", OK: false, Message: "chain head missing", Fix: "Re-run snapshot import and ensure head is committed"}
+		}
+		return Check{Name: "chain-head-exists", OK: false, Message: err.Error(), Fix: "Inspect chainstore/head.json permissions"}
+	}
+	if len(b) == 0 {
+		return Check{Name: "chain-head-exists", OK: false, Message: "chain head file empty", Fix: "Re-import snapshot"}
+	}
+	return Check{Name: "chain-head-exists", OK: true, Message: "chain head exists"}
+}
+
+func checkBlockstorePopulated(dataDir string) Check {
+	dir := filepath.Join(dataDir, "blockstore")
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return Check{Name: "blockstore-populated", OK: false, Message: "blockstore missing", Fix: "Re-run snapshot import"}
+	}
+	if len(ents) == 0 {
+		return Check{Name: "blockstore-populated", OK: false, Message: "blockstore empty", Fix: "Re-run snapshot import"}
+	}
+	return Check{Name: "blockstore-populated", OK: true, Message: fmt.Sprintf("blockstore contains %d blocks", len(ents))}
+}
+
+func checkStateRootReachable(dataDir string) Check {
+	headFile := filepath.Join(dataDir, "chainstore", "head.json")
+	b, err := os.ReadFile(headFile)
+	if err != nil {
+		return Check{Name: "state-root-reachable", OK: false, Message: "chain head unavailable", Fix: "Re-run snapshot import"}
+	}
+	var h struct {
+		StateRoot string `json:"stateRoot"`
+	}
+	if err := json.Unmarshal(b, &h); err != nil {
+		return Check{Name: "state-root-reachable", OK: false, Message: "invalid head format", Fix: "Re-run snapshot import with latest binary"}
+	}
+	if h.StateRoot == "" {
+		return Check{Name: "state-root-reachable", OK: false, Message: "state root missing", Fix: "Import a snapshot containing state root metadata"}
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "blockstore", h.StateRoot+".blk")); err != nil {
+		return Check{Name: "state-root-reachable", OK: false, Message: "state root block not found in blockstore", Fix: "Re-run import to rebuild blockstore"}
+	}
+	return Check{Name: "state-root-reachable", OK: true, Message: "state root reachable"}
 }

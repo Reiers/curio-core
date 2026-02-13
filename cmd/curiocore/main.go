@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,8 +19,10 @@ import (
 	importer "github.com/Reiers/curio-core/internal/import"
 	"github.com/Reiers/curio-core/internal/logging"
 	"github.com/Reiers/curio-core/internal/node"
+	"github.com/Reiers/curio-core/internal/rpc"
 	"github.com/Reiers/curio-core/internal/snapshot"
 	"github.com/Reiers/curio-core/internal/status"
+	"github.com/Reiers/curio-core/internal/store"
 	"github.com/Reiers/curio-core/internal/wallet"
 )
 
@@ -72,6 +75,11 @@ func main() {
 			logger.Errorf("wallet failed: %v", err)
 			os.Exit(1)
 		}
+	case "rpc":
+		if err := cmdRPC(os.Args[2:], logger); err != nil {
+			logger.Errorf("rpc failed: %v", err)
+			os.Exit(1)
+		}
 	default:
 		usage()
 		os.Exit(1)
@@ -89,6 +97,7 @@ func usage() {
 	fmt.Println("  curiocore chain msg --decode <hex|base64> [--explain]")
 	fmt.Println("  curiocore chain coverage-report")
 	fmt.Println("  curiocore wallet new|list|show|export|import|resolve|sign|verify")
+	fmt.Println("  curiocore rpc serve [--listen :1234]")
 	fmt.Println("")
 	fmt.Println("Examples:")
 	fmt.Println("  curiocore doctor --explain")
@@ -334,8 +343,16 @@ func cmdStatus(args []string, log *logging.Logger) error {
 		if err != nil {
 			return err
 		}
+		cs := store.NewChainStore(cfg.NetworkDataDir())
+		head, _ := cs.Head()
 		if *jsonOut {
-			fmt.Println(s.JSON())
+			out := map[string]any{"status": s, "head": head}
+			b, _ := json.Marshal(out)
+			fmt.Println(string(b))
+			return nil
+		}
+		if head != nil {
+			fmt.Printf("stage=%s progress=%d%% height=%d tipset=%s updated=%s message=%s\n", s.Stage, s.Progress, head.Height, head.TipSetKey, s.UpdatedAt.Format(time.RFC3339), s.Message)
 			return nil
 		}
 		fmt.Printf("stage=%s progress=%d%% updated=%s message=%s\n", s.Stage, s.Progress, s.UpdatedAt.Format(time.RFC3339), s.Message)
@@ -357,6 +374,7 @@ func cmdDoctor(args []string, log *logging.Logger) error {
 	dataDir := fs.String("data-dir", defaultHome(), "curiocore home")
 	explain := fs.Bool("explain", false, "explain each check and remediation")
 	jsonOut := fs.Bool("json", false, "json output")
+	postImport := fs.Bool("post-import", false, "run post-import chainstore checks")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -364,6 +382,13 @@ func cmdDoctor(args []string, log *logging.Logger) error {
 	checks, err := doctor.Run(cfg.HomeDir, cfg.DataDir)
 	if err != nil {
 		return err
+	}
+	if *postImport {
+		post, pErr := doctor.RunPostImport(cfg.NetworkDataDir())
+		if pErr != nil {
+			return pErr
+		}
+		checks = append(checks, post...)
 	}
 	if *jsonOut {
 		b, _ := json.MarshalIndent(checks, "", "  ")
@@ -595,6 +620,28 @@ func cmdWallet(args []string, _ *logging.Logger) error {
 	default:
 		return fmt.Errorf("unknown wallet subcommand: %s", sub)
 	}
+}
+
+func cmdRPC(args []string, log *logging.Logger) error {
+	if len(args) == 0 || args[0] != "serve" {
+		return errors.New("usage: curiocore rpc serve [--listen :1234] [--data-dir ~/.curiocore]")
+	}
+	fs := flag.NewFlagSet("rpc serve", flag.ContinueOnError)
+	listen := fs.String("listen", ":1234", "listen address")
+	dataDir := fs.String("data-dir", defaultHome(), "curiocore home")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	cfg, err := config.LoadOrDefault(*dataDir)
+	if err != nil {
+		return err
+	}
+	if err := config.InitDirs(cfg); err != nil {
+		return err
+	}
+	srv := rpc.New(cfg)
+	log.Infof("rpc listening on %s", *listen)
+	return http.ListenAndServe(*listen, srv.Handler())
 }
 
 func decodeMessage(v string) ([]byte, string, error) {
