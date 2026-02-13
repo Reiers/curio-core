@@ -221,14 +221,14 @@ Watch transitive dependencies with different terms (especially optional crates/l
   - Optional high-throughput indexers.
 
 ### 4.2 Module breakdown
-- `curio-rpc` (Lotus API compatibility)
-- `curio-sync-orchestrator`
-- `curio-chainstore`
-- `curio-consensus-policy`
-- `curio-state-transition`
-- `curio-network-fetch`
-- `curio-observability`
-- `curio-upgrade-manager`
+- `curiocore-rpc` (Lotus API compatibility)
+- `curiocore-sync-orchestrator`
+- `curiocore-chainstore`
+- `curiocore-consensus-policy`
+- `curiocore-state-transition`
+- `curiocore-network-fetch`
+- `curiocore-observability`
+- `curiocore-upgrade-manager`
 
 ### 4.3 Language strategy + FFI boundaries
 - Phase A: all consensus-critical path in one language/runtime boundary.

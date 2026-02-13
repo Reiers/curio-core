@@ -5,7 +5,7 @@ Curio Core is a private alpha sync-node project informed by deep architectural a
 ## Alpha scope
 
 This alpha focuses on bootstrap UX and sync-node scaffolding:
-- guided setup flow (`curio sync`)
+- guided setup flow (`curiocore sync`)
 - fast sync from snapshots
 - manual snapshot import
 - status tracking with stage/progress output
@@ -27,45 +27,45 @@ Default snapshot sources:
 ## Quickstart
 
 ```bash
-curio init
-curio sync
+curiocore init
+curiocore sync
 ```
 
 ## Advanced
 
 Download only:
 ```bash
-curio snapshot download --network mainnet
+curiocore snapshot download --network mainnet
 ```
 
 Import only:
 ```bash
-curio snapshot import --network mainnet --file ~/.curio/snapshots/mainnet/mainnet-latest.car.zst
+curiocore snapshot import --network mainnet --file ~/.curiocore/snapshots/mainnet/mainnet-latest.car.zst
 ```
 
 Cleanup only:
 ```bash
-curio snapshot cleanup --network mainnet --all --yes
+curiocore snapshot cleanup --network mainnet --all --yes
 ```
 
 Status:
 ```bash
-curio status
-curio status --watch
+curiocore status
+curiocore status --watch
 ```
 
 ## Disk paths
 
-Default home: `~/.curio/`
+Default home: `~/.curiocore/` (override with `CURIOCORE_HOME`)
 
-- config: `~/.curio/config.json`
-- status: `~/.curio/status.json`
-- snapshots: `~/.curio/snapshots/<network>/`
-- data: `~/.curio/data/<network>/`
+- config: `~/.curiocore/config.json`
+- status: `~/.curiocore/status.json`
+- snapshots: `~/.curiocore/snapshots/<network>/`
+- data: `~/.curiocore/data/<network>/`
 
 ## Verify success
 
-`curio status` should move through stages:
+`curiocore status` should move through stages:
 - `downloading`
 - `verifying`
 - `importing`
@@ -77,7 +77,7 @@ Default home: `~/.curio/`
 - Ensure `aria2c` is installed and in PATH.
 - Ensure snapshot URL is reachable.
 - Use `--snapshot-url` override if mirror changes.
-- Ensure write permissions on `~/.curio`.
+- Ensure write permissions on `~/.curiocore`.
 
 ## Roadmap
 

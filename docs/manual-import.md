@@ -5,7 +5,7 @@ Use manual import when snapshot files are already downloaded.
 ## Command
 
 ```bash
-curio snapshot import --network mainnet --file /path/to/snapshot.car.zst
+curiocore snapshot import --network mainnet --file /path/to/snapshot.car.zst
 ```
 
 ## Expected checks

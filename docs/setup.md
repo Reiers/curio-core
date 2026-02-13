@@ -44,5 +44,5 @@ rustup default stable
 
 ```bash
 make build
-./bin/curio --help
+./bin/curiocore --help
 ```
