@@ -2,6 +2,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,11 +14,13 @@ import (
 	"time"
 
 	"github.com/Reiers/curio-core/internal/config"
+	"github.com/Reiers/curio-core/internal/doctor"
 	importer "github.com/Reiers/curio-core/internal/import"
 	"github.com/Reiers/curio-core/internal/logging"
 	"github.com/Reiers/curio-core/internal/node"
 	"github.com/Reiers/curio-core/internal/snapshot"
 	"github.com/Reiers/curio-core/internal/status"
+	"github.com/Reiers/curio-core/internal/wallet"
 )
 
 func main() {
@@ -46,6 +51,21 @@ func main() {
 			logger.Errorf("status failed: %v", err)
 			os.Exit(1)
 		}
+	case "doctor":
+		if err := cmdDoctor(os.Args[2:], logger); err != nil {
+			logger.Errorf("doctor failed: %v", err)
+			os.Exit(1)
+		}
+	case "chain":
+		if err := cmdChain(os.Args[2:], logger); err != nil {
+			logger.Errorf("chain failed: %v", err)
+			os.Exit(1)
+		}
+	case "wallet":
+		if err := cmdWallet(os.Args[2:], logger); err != nil {
+			logger.Errorf("wallet failed: %v", err)
+			os.Exit(1)
+		}
 	default:
 		usage()
 		os.Exit(1)
@@ -56,11 +76,18 @@ func usage() {
 	fmt.Println("Curio Core (alpha)")
 	fmt.Println("Commands:")
 	fmt.Println("  curio init")
-	fmt.Println("  curio sync")
-	fmt.Println("  curio snapshot download")
-	fmt.Println("  curio snapshot import")
-	fmt.Println("  curio snapshot cleanup")
+	fmt.Println("  curio sync [--explain]")
+	fmt.Println("  curio doctor [--explain]")
+	fmt.Println("  curio snapshot download|import|cleanup")
 	fmt.Println("  curio status")
+	fmt.Println("  curio chain msg --decode <hex|base64> [--explain]")
+	fmt.Println("  curio chain coverage-report")
+	fmt.Println("  curio wallet new|list|show|export|import|resolve|sign|verify")
+	fmt.Println("")
+	fmt.Println("Examples:")
+	fmt.Println("  curio doctor --explain")
+	fmt.Println("  curio chain msg --decode 0x68656c6c6f")
+	fmt.Println("  curio wallet new --name worker-a --type secp --explain")
 }
 
 func defaultHome() string {
@@ -98,6 +125,7 @@ func cmdSync(args []string, log *logging.Logger) error {
 	snapshotURL := fs.String("snapshot-url", "", "override snapshot URL")
 	keepSnapshot := fs.Bool("keep-snapshot", false, "keep snapshot after import")
 	yes := fs.Bool("yes", false, "non-interactive")
+	explain := fs.Bool("explain", false, "show staged explanation before executing")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -113,6 +141,9 @@ func cmdSync(args []string, log *logging.Logger) error {
 	network := cfg.Network
 	mode := "fast"
 	snapshotFile := *snapshotFileFlag
+	if *explain {
+		fmt.Println("[explain] sync stages: configure -> snapshot(download/verify) -> import -> start skeleton -> cleanup")
+	}
 	if *networkFlag != "" {
 		network = *networkFlag
 	}
@@ -303,6 +334,264 @@ func cmdStatus(args []string, log *logging.Logger) error {
 		}
 		time.Sleep(time.Second)
 	}
+}
+
+func cmdDoctor(args []string, log *logging.Logger) error {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	dataDir := fs.String("data-dir", defaultHome(), "curio home")
+	explain := fs.Bool("explain", false, "explain each check and remediation")
+	jsonOut := fs.Bool("json", false, "json output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg, _ := config.LoadOrDefault(*dataDir)
+	checks, err := doctor.Run(cfg.HomeDir, cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	if *jsonOut {
+		b, _ := json.MarshalIndent(checks, "", "  ")
+		fmt.Println(string(b))
+	} else {
+		fmt.Println("Doctor report")
+		for _, c := range checks {
+			state := "OK"
+			if !c.OK {
+				state = "FAIL"
+			}
+			fmt.Printf(" - [%s] %s: %s\n", state, c.Name, c.Message)
+			if !c.OK && c.Fix != "" {
+				fmt.Printf("   fix: %s\n", c.Fix)
+			}
+			if *explain {
+				fmt.Printf("   explain: check ensures %s is healthy before sync/import workflows.\n", c.Name)
+			}
+		}
+	}
+	for _, c := range checks {
+		if !c.OK {
+			return errors.New("doctor detected failures")
+		}
+	}
+	log.Infof("doctor checks passed")
+	return nil
+}
+
+func cmdChain(args []string, _ *logging.Logger) error {
+	if len(args) == 0 {
+		return errors.New("usage: curio chain <msg|coverage-report>")
+	}
+	switch args[0] {
+	case "msg":
+		fs := flag.NewFlagSet("chain msg", flag.ContinueOnError)
+		decode := fs.String("decode", "", "decode hex/base64 message bytes")
+		explain := fs.Bool("explain", false, "explain decode logic")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *decode == "" {
+			return errors.New("use --decode <hex|base64>")
+		}
+		decoded, format, err := decodeMessage(*decode)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Decoded (%s): %q\n", format, string(decoded))
+		if *explain {
+			fmt.Println("[explain] attempts hex decode first (0x optional), then base64 fallback")
+		}
+		return nil
+	case "coverage-report":
+		fmt.Println("Chain coverage report (alpha scaffold)")
+		fmt.Println(" - message decode: available")
+		fmt.Println(" - actor map: TODO")
+		fmt.Println(" - tipset drilldown: TODO")
+		fmt.Println(" - parity checks: TODO")
+		return nil
+	default:
+		return fmt.Errorf("unknown chain subcommand: %s", args[0])
+	}
+}
+
+func cmdWallet(args []string, _ *logging.Logger) error {
+	if len(args) == 0 {
+		return errors.New("usage: curio wallet <new|list|show|export|import|resolve|sign|verify>")
+	}
+	home := defaultHome()
+	sub := args[0]
+	subArgs := args[1:]
+
+	loadWithPrompt := func(op string) (*wallet.Store, string, error) {
+		pass := askInput(fmt.Sprintf("Wallet password for %s", op), "")
+		st, err := wallet.Load(home, pass)
+		return st, pass, err
+	}
+
+	switch sub {
+	case "new":
+		fs := flag.NewFlagSet("wallet new", flag.ContinueOnError)
+		name := fs.String("name", "", "wallet name")
+		keyType := fs.String("type", "secp", "secp|bls|delegated")
+		explain := fs.Bool("explain", false, "explain alpha key generation")
+		if err := fs.Parse(subArgs); err != nil {
+			return err
+		}
+		if *name == "" {
+			return errors.New("--name is required")
+		}
+		st, pass, err := loadWithPrompt("new")
+		if err != nil {
+			return err
+		}
+		e, err := st.Add(*name, wallet.KeyType(*keyType))
+		if err != nil {
+			return err
+		}
+		if err := wallet.Save(home, pass, st); err != nil {
+			return err
+		}
+		fmt.Printf("[1/2] wallet record created: %s\n", e.Name)
+		fmt.Printf("[2/2] address: %s (type=%s)\n", e.Address, e.KeyType)
+		if *explain {
+			fmt.Println("[explain] alpha mode uses placeholder key material and AES-GCM encrypted local storage")
+		}
+		return nil
+	case "list":
+		st, _, err := loadWithPrompt("list")
+		if err != nil {
+			return err
+		}
+		if len(st.Entries) == 0 {
+			fmt.Println("No wallets found")
+			return nil
+		}
+		for _, e := range st.Entries {
+			fmt.Printf("- %s\t%s\t(%s)\n", e.Name, e.Address, e.KeyType)
+		}
+		return nil
+	case "show":
+		fs := flag.NewFlagSet("wallet show", flag.ContinueOnError)
+		q := fs.String("wallet", "", "wallet name or address")
+		if err := fs.Parse(subArgs); err != nil {
+			return err
+		}
+		if *q == "" {
+			return errors.New("--wallet is required")
+		}
+		st, _, err := loadWithPrompt("show")
+		if err != nil {
+			return err
+		}
+		e, err := st.FindByNameOrAddress(*q)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("name=%s address=%s type=%s created=%s\n", e.Name, e.Address, e.KeyType, e.CreatedAt.Format(time.RFC3339))
+		return nil
+	case "export":
+		fmt.Println("wallet export scaffold: TODO (format selection + redaction safeguards)")
+		return nil
+	case "import":
+		fs := flag.NewFlagSet("wallet import", flag.ContinueOnError)
+		name := fs.String("name", "", "wallet name")
+		keyType := fs.String("type", "secp", "secp|bls|delegated")
+		priv := fs.String("private-key", "", "private key payload (alpha placeholder accepted)")
+		if err := fs.Parse(subArgs); err != nil {
+			return err
+		}
+		if *name == "" || *priv == "" {
+			return errors.New("--name and --private-key are required")
+		}
+		st, pass, err := loadWithPrompt("import")
+		if err != nil {
+			return err
+		}
+		e, err := st.Add(*name, wallet.KeyType(*keyType))
+		if err != nil {
+			return err
+		}
+		e.PrivateKey = *priv
+		for i := range st.Entries {
+			if st.Entries[i].Name == e.Name {
+				st.Entries[i] = e
+			}
+		}
+		if err := wallet.Save(home, pass, st); err != nil {
+			return err
+		}
+		fmt.Printf("Imported wallet %s (%s)\n", e.Name, e.Address)
+		return nil
+	case "resolve":
+		fs := flag.NewFlagSet("wallet resolve", flag.ContinueOnError)
+		addr := fs.String("address", "", "address to resolve")
+		if err := fs.Parse(subArgs); err != nil {
+			return err
+		}
+		if *addr == "" {
+			return errors.New("--address is required")
+		}
+		if _, _, err := loadWithPrompt("resolve"); err != nil {
+			return err
+		}
+		if strings.HasPrefix(*addr, "f2") {
+			fmt.Println("TODO: f2 actor lookup requires live chain index integration")
+			return nil
+		}
+		fmt.Printf("Address does not require on-chain resolve: %s\n", *addr)
+		return nil
+	case "sign":
+		fs := flag.NewFlagSet("wallet sign", flag.ContinueOnError)
+		q := fs.String("wallet", "", "wallet name or address")
+		msg := fs.String("message", "", "message to sign")
+		if err := fs.Parse(subArgs); err != nil {
+			return err
+		}
+		if *q == "" || *msg == "" {
+			return errors.New("--wallet and --message are required")
+		}
+		st, _, err := loadWithPrompt("sign")
+		if err != nil {
+			return err
+		}
+		e, err := st.FindByNameOrAddress(*q)
+		if err != nil {
+			return err
+		}
+		sig := base64.StdEncoding.EncodeToString([]byte("sig:" + e.Address + ":" + *msg))
+		fmt.Printf("Signature (alpha): %s\n", sig)
+		return nil
+	case "verify":
+		fs := flag.NewFlagSet("wallet verify", flag.ContinueOnError)
+		sig := fs.String("signature", "", "signature to verify")
+		if err := fs.Parse(subArgs); err != nil {
+			return err
+		}
+		if *sig == "" {
+			return errors.New("--signature is required")
+		}
+		_, err := base64.StdEncoding.DecodeString(*sig)
+		if err != nil {
+			fmt.Println("verify: invalid signature encoding")
+			return nil
+		}
+		fmt.Println("verify: signature format accepted (alpha stub)")
+		return nil
+	default:
+		return fmt.Errorf("unknown wallet subcommand: %s", sub)
+	}
+}
+
+func decodeMessage(v string) ([]byte, string, error) {
+	trim := strings.TrimSpace(v)
+	trim = strings.TrimPrefix(trim, "0x")
+	if b, err := hex.DecodeString(trim); err == nil {
+		return b, "hex", nil
+	}
+	b, err := base64.StdEncoding.DecodeString(v)
+	if err != nil {
+		return nil, "", errors.New("decode failed: provide valid hex (0x...) or base64")
+	}
+	return b, "base64", nil
 }
 
 func askChoice(name string, opts []string, def string) string {
