@@ -6,10 +6,10 @@
 - Add `--explain` mode for key workflows (`sync`, `doctor`, `wallet new`, `chain msg`).
 
 ## New/Extended Commands
-- `curio doctor [--data-dir <path>] [--json] [--explain]`
-- `curio chain msg --decode <hex|base64> [--explain]`
-- `curio chain coverage-report`
-- `curio wallet new|list|show|export|import|resolve|sign|verify`
+- `curiocore doctor [--data-dir <path>] [--json] [--explain]`
+- `curiocore chain msg --decode <hex|base64> [--explain]`
+- `curiocore chain coverage-report`
+- `curiocore wallet new|list|show|export|import|resolve|sign|verify`
 
 ## UX Requirements
 1. Command help text includes short examples.
@@ -20,14 +20,14 @@
 ## Doctor Output Contract
 Checks:
 - `aria2c-installed`
-- `disk-space` on `~/.curio`
+- `disk-space` on `~/.curiocore`
 - `data-dir-writable`
 
 Each failed check must include `fix:` line with actionable next step.
 
 ## Acceptance Criteria (Measurable)
-1. `curio doctor` exits non-zero on any failed check and exits 0 when all pass.
-2. `curio doctor --json` outputs parseable JSON array of checks.
-3. `curio sync --explain` prints stage explanation before execution.
-4. `curio wallet new --explain` prints alpha security note.
-5. `curio chain msg --decode ... --explain` prints decode strategy.
+1. `curiocore doctor` exits non-zero on any failed check and exits 0 when all pass.
+2. `curiocore doctor --json` outputs parseable JSON array of checks.
+3. `curiocore sync --explain` prints stage explanation before execution.
+4. `curiocore wallet new --explain` prints alpha security note.
+5. `curiocore chain msg --decode ... --explain` prints decode strategy.

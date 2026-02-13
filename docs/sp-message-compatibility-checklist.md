@@ -1,7 +1,7 @@
 # SP Message Compatibility Checklist (Next Alpha)
 
 ## Scope
-Groundwork for `curio chain msg --decode` and follow-up SP-oriented message tooling.
+Groundwork for `curiocore chain msg --decode` and follow-up SP-oriented message tooling.
 
 ## Checklist
 - [ ] Decode supports hex input (`0x...` and raw hex).
@@ -11,11 +11,11 @@ Groundwork for `curio chain msg --decode` and follow-up SP-oriented message tool
 - [ ] Non-decodable input returns actionable error text.
 
 ## Command Spec
-- `curio chain msg --decode <hex|base64> [--explain]`
+- `curiocore chain msg --decode <hex|base64> [--explain]`
 
 ### Example
 ```bash
-curio chain msg --decode 0x68656c6c6f --explain
+curiocore chain msg --decode 0x68656c6c6f --explain
 ```
 
 Expected staged UX:

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NETWORK="${1:-mainnet}"
-OUTDIR="${2:-$HOME/.curio/snapshots/$NETWORK}"
+OUTDIR="${2:-$HOME/.curiocore/snapshots/$NETWORK}"
 
 case "$NETWORK" in
   mainnet) URL="https://forest-archive.chainsafe.dev/latest/mainnet/" ;;

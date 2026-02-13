@@ -2,7 +2,7 @@
 
 Fast sync bootstraps Curio Core from a recent snapshot archive.
 
-## Guided flow (`curio sync`)
+## Guided flow (`curiocore sync`)
 
 1. Select network (`mainnet` / `calibnet`)
 2. Select mode (`fast`)
@@ -22,13 +22,13 @@ Fast sync bootstraps Curio Core from a recent snapshot archive.
 ## Direct commands
 
 ```bash
-curio snapshot download --network mainnet
-curio snapshot import --network mainnet --file <path>
-curio snapshot cleanup --network mainnet --all --yes
+curiocore snapshot download --network mainnet
+curiocore snapshot import --network mainnet --file <path>
+curiocore snapshot cleanup --network mainnet --all --yes
 ```
 
 ## Progress
 
 - Download progress from `aria2c` output parsing
 - Import progress from bytes processed (alpha approximation)
-- Status persisted in `~/.curio/status.json`
+- Status persisted in `~/.curiocore/status.json`

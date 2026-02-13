@@ -1,10 +1,10 @@
-BIN=bin/curio
+BIN=bin/curiocore
 
 .PHONY: build test fmt
 
 build:
 	mkdir -p bin
-	go build -o $(BIN) ./cmd/curio
+	go build -o $(BIN) ./cmd/curiocore
 
 test:
 	go test ./...

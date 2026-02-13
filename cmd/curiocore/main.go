@@ -23,11 +23,17 @@ import (
 	"github.com/Reiers/curio-core/internal/wallet"
 )
 
+const Version = "v0.1.0-alpha2"
+
 func main() {
 	logger := logging.New()
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(1)
+	}
+	if os.Args[1] == "--version" || os.Args[1] == "version" {
+		fmt.Println(Version)
+		return
 	}
 
 	switch os.Args[1] {
@@ -73,31 +79,41 @@ func main() {
 }
 
 func usage() {
-	fmt.Println("Curio Core (alpha)")
+	fmt.Printf("Curio Core %s\n", Version)
 	fmt.Println("Commands:")
-	fmt.Println("  curio init")
-	fmt.Println("  curio sync [--explain]")
-	fmt.Println("  curio doctor [--explain]")
-	fmt.Println("  curio snapshot download|import|cleanup")
-	fmt.Println("  curio status")
-	fmt.Println("  curio chain msg --decode <hex|base64> [--explain]")
-	fmt.Println("  curio chain coverage-report")
-	fmt.Println("  curio wallet new|list|show|export|import|resolve|sign|verify")
+	fmt.Println("  curiocore init")
+	fmt.Println("  curiocore sync [--explain]")
+	fmt.Println("  curiocore doctor [--explain]")
+	fmt.Println("  curiocore snapshot download|import|cleanup")
+	fmt.Println("  curiocore status")
+	fmt.Println("  curiocore chain msg --decode <hex|base64> [--explain]")
+	fmt.Println("  curiocore chain coverage-report")
+	fmt.Println("  curiocore wallet new|list|show|export|import|resolve|sign|verify")
 	fmt.Println("")
 	fmt.Println("Examples:")
-	fmt.Println("  curio doctor --explain")
-	fmt.Println("  curio chain msg --decode 0x68656c6c6f")
-	fmt.Println("  curio wallet new --name worker-a --type secp --explain")
+	fmt.Println("  curiocore doctor --explain")
+	fmt.Println("  curiocore chain msg --decode 0x68656c6c6f")
+	fmt.Println("  curiocore wallet new --name worker-a --type secp --explain")
 }
 
 func defaultHome() string {
+	if v := os.Getenv("CURIOCORE_HOME"); v != "" {
+		return v
+	}
 	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".curio")
+	newHome := filepath.Join(h, ".curiocore")
+	legacyHome := filepath.Join(h, ".curio")
+	if _, err := os.Stat(newHome); os.IsNotExist(err) {
+		if _, legacyErr := os.Stat(legacyHome); legacyErr == nil {
+			fmt.Fprintf(os.Stderr, "[migration] legacy home detected at %s (using %s). Set CURIOCORE_HOME to override.\n", legacyHome, newHome)
+		}
+	}
+	return newHome
 }
 
 func cmdInit(args []string, log *logging.Logger) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	dataDir := fs.String("data-dir", defaultHome(), "curio home")
+	dataDir := fs.String("data-dir", defaultHome(), "curiocore home")
 	network := fs.String("network", "mainnet", "mainnet|calibnet")
 	force := fs.Bool("force", false, "overwrite existing config")
 	if err := fs.Parse(args); err != nil {
@@ -118,7 +134,7 @@ func cmdInit(args []string, log *logging.Logger) error {
 
 func cmdSync(args []string, log *logging.Logger) error {
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
-	dataDir := fs.String("data-dir", defaultHome(), "curio home")
+	dataDir := fs.String("data-dir", defaultHome(), "curiocore home")
 	networkFlag := fs.String("network", "", "mainnet|calibnet")
 	modeFlag := fs.String("mode", "", "fast|manual|empty")
 	snapshotFileFlag := fs.String("snapshot-file", "", "path to snapshot file")
@@ -227,7 +243,7 @@ func cmdSync(args []string, log *logging.Logger) error {
 
 func cmdSnapshot(args []string, log *logging.Logger) error {
 	if len(args) == 0 {
-		return errors.New("usage: curio snapshot <download|import|cleanup>")
+		return errors.New("usage: curiocore snapshot <download|import|cleanup>")
 	}
 	sub := args[0]
 	subArgs := args[1:]
@@ -306,7 +322,7 @@ func cmdStatus(args []string, log *logging.Logger) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	jsonOut := fs.Bool("json", false, "json output")
 	watch := fs.Bool("watch", false, "watch mode")
-	dataDir := fs.String("data-dir", defaultHome(), "curio home")
+	dataDir := fs.String("data-dir", defaultHome(), "curiocore home")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -338,7 +354,7 @@ func cmdStatus(args []string, log *logging.Logger) error {
 
 func cmdDoctor(args []string, log *logging.Logger) error {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	dataDir := fs.String("data-dir", defaultHome(), "curio home")
+	dataDir := fs.String("data-dir", defaultHome(), "curiocore home")
 	explain := fs.Bool("explain", false, "explain each check and remediation")
 	jsonOut := fs.Bool("json", false, "json output")
 	if err := fs.Parse(args); err != nil {
@@ -379,7 +395,7 @@ func cmdDoctor(args []string, log *logging.Logger) error {
 
 func cmdChain(args []string, _ *logging.Logger) error {
 	if len(args) == 0 {
-		return errors.New("usage: curio chain <msg|coverage-report>")
+		return errors.New("usage: curiocore chain <msg|coverage-report>")
 	}
 	switch args[0] {
 	case "msg":
@@ -415,7 +431,7 @@ func cmdChain(args []string, _ *logging.Logger) error {
 
 func cmdWallet(args []string, _ *logging.Logger) error {
 	if len(args) == 0 {
-		return errors.New("usage: curio wallet <new|list|show|export|import|resolve|sign|verify>")
+		return errors.New("usage: curiocore wallet <new|list|show|export|import|resolve|sign|verify>")
 	}
 	home := defaultHome()
 	sub := args[0]

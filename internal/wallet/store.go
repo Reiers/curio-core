@@ -117,7 +117,7 @@ func (s *Store) FindByNameOrAddress(q string) (*Entry, error) {
 }
 
 func encrypt(plaintext []byte, passphrase string) ([]byte, error) {
-	key := sha256.Sum256([]byte("curio-alpha-salt::" + passphrase))
+	key := sha256.Sum256([]byte("curiocore-alpha-salt::" + passphrase))
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func encrypt(plaintext []byte, passphrase string) ([]byte, error) {
 }
 
 func decrypt(ciphertext []byte, passphrase string) ([]byte, error) {
-	key := sha256.Sum256([]byte("curio-alpha-salt::" + passphrase))
+	key := sha256.Sum256([]byte("curiocore-alpha-salt::" + passphrase))
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, err
