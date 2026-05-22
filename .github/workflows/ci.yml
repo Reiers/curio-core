@@ -1,0 +1,59 @@
+# Per-push CI for curio-core. Runs on every push to main + every PR.
+# Mirrors Reiers/lantern's CI workflow.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    name: build + test + vet + fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: true
+
+      - name: Configure git for private Reiers deps
+        env:
+          GH_TOKEN: ${{ secrets.LANTERN_RO_TOKEN }}
+        run: |
+          if [ -n "$GH_TOKEN" ]; then
+            git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+
+      - name: go vet
+        env:
+          GOPRIVATE: github.com/Reiers/*
+        run: go vet ./...
+
+      - name: go build
+        env:
+          CGO_ENABLED: '0'
+          GOPRIVATE: github.com/Reiers/*
+        run: go build ./...
+
+      - name: go test
+        env:
+          CGO_ENABLED: '1' # race detector
+          GOPRIVATE: github.com/Reiers/*
+        run: go test -race -timeout 5m ./...
+
+      - name: gofmt
+        run: |
+          set -e
+          drift="$(gofmt -l .)"
+          if [ -n "$drift" ]; then
+            echo "::error::gofmt drift detected:"
+            echo "$drift"
+            exit 1
+          fi
