@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Curio Core wordmark (horizontal lockup) — v4.
+
+  v3 hand-drew the lowercase "i" as rect + circle. Render output had
+  the stem reading as a block, which felt off in critique.
+  v4 returns to letting the font render the "i" naturally via a single
+  <text> element with per-character <tspan> coloring. Plain text means
+  the letter spacing matches the font's own metrics; no manual gap
+  juggling.
+
+  Layout: [rhombus mark with center dot] CURiO core
+    - All 5 letters of "CURiO" emitted by the same <text> element so
+      kerning is handled by the renderer.
+    - tspans:
+        "CUR" -> #1A1A1A (near-black)
+        "i"   -> #22BFC4 (teal accent; the brand signature)
+        "O"   -> #1A1A1A
+    - " core" follows as a separate <text> with the muted gray + smaller
+      size.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 180" width="720" height="180">
+  <title>Curio Core</title>
+
+  <!-- Mark: rhombus + center dot. Source: curio-core-mark.svg. -->
+  <g transform="translate(20, 20) scale(0.547)">
+    <path
+      d="M 128 32 L 224 128 L 128 224 L 32 128 Z"
+      fill="none"
+      stroke="#1A1A1A"
+      stroke-width="12"
+      stroke-linejoin="round"
+    />
+    <circle cx="128" cy="128" r="20" fill="#22BFC4" />
+  </g>
+
+  <!-- "CURiO" — single text element so kerning is automatic. -->
+  <text
+    x="190"
+    y="120"
+    font-family="'Helvetica Neue', 'Inter', 'Arial', sans-serif"
+    font-size="86"
+    font-weight="700"
+    letter-spacing="2"
+  >
+    <tspan fill="#1A1A1A">CUR</tspan><tspan fill="#22BFC4">i</tspan><tspan fill="#1A1A1A">O</tspan>
+  </text>
+
+  <!-- " core" suffix in lighter weight + smaller size + muted gray.
+       x positioned to clear "CURiO"'s right edge with a deliberate gap
+       (≈20px at this scale) so the wordmark reads as two words: the
+       brand name "CURiO" then the variant suffix "core". -->
+  <text
+    x="475"
+    y="120"
+    font-family="'Helvetica Neue', 'Inter', 'Arial', sans-serif"
+    font-size="56"
+    font-weight="400"
+    fill="#888888"
+  >core</text>
+</svg>
