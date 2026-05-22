@@ -1,0 +1,14 @@
+# Build output
+/curio-core
+/dist/
+
+# Test/operator data
+/data/
+*.sqlite
+*.sqlite-journal
+
+# Editor / OS noise
+.DS_Store
+.vscode/
+.idea/
+*.swp
