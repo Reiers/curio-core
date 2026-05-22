@@ -35,10 +35,10 @@ Branch cut: 2026-05-23
 
 ## Day 5 — Wire-up + first-run config
 
-- [ ] Wire `harmonytask.Engine` against `harmonysqlite` (skip Peering layer; single-server)
-- [ ] Register `tasks/pdp` + `tasks/pdpv0` taskTypes against the engine
-- [ ] First-run config: detect missing default-layer fields, return `/setup` redirect from WebUI, block on submit
-- [ ] CLI: `curio-core run --print-setup-url` on boot
+- [~] Wire `harmonytask.Engine` against `harmonysqlite` (skip Peering layer; single-server) — engine shell + lifecycle + machine row done; the `harmonytask.New(...)` call itself is blocked on fork-side `*harmonydb.DB` → interface refactor (see `docs/DAY-5-NOTES.md` § "Fork follow-ups")
+- [x] Register `tasks/pdp` + `tasks/pdpv0` taskTypes against the engine — 21 total: 12 v1 (9 live `.TypeDetails()` harvest + 3 static), 9 v0 (all static pending Day 6 carve-out)
+- [x] First-run config: detect missing default-layer fields, return `/setup` redirect from WebUI, block on submit
+- [x] CLI: `curio-core run` prints `Setup required. Open http://<listen>/setup ...` on boot when unconfigured
 
 ## Day 6 — PDP test port
 

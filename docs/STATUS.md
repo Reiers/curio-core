@@ -2,22 +2,27 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-23 01:35 CEST** (after the Day 4 carve-out + Day 3 sub-agent cleanup).
+Last updated: **2026-05-23 01:55 CEST** (after the Day 5 engine wire-up + first-run config flow).
 
 ## What works today
 
 - `curio-core probe` boots an embedded Lantern, anchors against the live mainnet gateway, and shuts down cleanly. 25 MB pure-Go binary, `CGO_ENABLED=0`.
+- `curio-core run` starts the full daemon: SQLite state DB (auto-migrates) → harmonytask task registry (21 task types: 12 PDP v1 + 9 PDP v0) → first-run config probe → optional embedded Lantern → WebUI with `/setup` flow. SIGTERM unwinds cleanly. Verified end-to-end against a fresh data-dir.
+- `internal/engine` wraps the SQLite handle + task registry + lifecycle. Single-server (no Peering layer); `harmony_machines` stays a single-row table keyed by HostAndPort.
+- `internal/config` owns the `harmony_config` default-layer read/write (TOML-encoded `[Pdp]{MarketAddress, WalletAddress, MinerID}`).
+- `internal/setupweb` is the CGO-free /setup HTTP handler + middleware (redirect-to-/setup until configured, fall-through afterwards).
 - `internal/harmonysqlite` applies 14 migrations on `New()`, produces 55 SQLite tables (16 `pdp_*` + 39 infra), and passes its acceptance test suite (`go test ./internal/harmonysqlite/...`, 8 tests + ~50 subtests).
 - `internal/pieceio` defines the `PieceReader` interface that lets us avoid linking `curio/lib/ffi`.
 - `Reiers/curio` fork's `tasks/pdp` compiles under `CGO_ENABLED=0` against the `PieceReader` interface (milestone commit a1a4449 in this repo, paired with the corresponding fork commits in Reiers/curio).
 - `web/` is the upstream Curio WebUI with porep/clustering/sealing panels stripped (`ab9990f`). Behind a `//go:build cgo` shim until the WebUI's transitive deps (gosigar, lotus storage paths, curio ffi) are carved out.
 - `CGO_ENABLED=0 go build ./...` is green.
+- `CGO_ENABLED=0 go test ./internal/... ./cmd/...` is green.
 
 ## What doesn't work yet
 
-- No actual PDP tasks have been registered against the harmonytask engine yet. The wire-up is Day 5.
+- The harmonytask scheduler goroutine is NOT running. `harmonytask.New` takes a concrete `*harmonydb.DB` (pgx-backed); plugging in our SQLite handle is blocked on a fork-side DB-interface refactor. See `docs/DAY-5-NOTES.md` § "Fork follow-ups" for the concrete patch shape. The engine wraps everything around that hole; once the seam exists, the wire-up is a one-line `harmonytask.New(...)` call.
+- PDP v0 task descriptors are static literals (since `tasks/pdpv0` still pulls in gosigar + lotus storage paths). Day 6 swaps them for live `pdpv0.NewXxx().TypeDetails()` harvests.
 - `internal/pdptests/` has scaffolds but is gated behind `//go:build pdp_full_carveout` because the test-time transitives still pull in lotus storage paths + gosigar. Day 6.
-- No first-run config / `/setup` flow yet. Day 5.
 - No calibration miner running curio-core end-to-end. Day 7-8.
 
 ## Files of record

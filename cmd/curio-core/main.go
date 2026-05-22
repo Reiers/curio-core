@@ -16,8 +16,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -26,6 +29,10 @@ import (
 
 	lantern "github.com/Reiers/lantern/pkg/daemon"
 	"github.com/Reiers/lantern/wallet"
+
+	"github.com/Reiers/curio-core/internal/config"
+	"github.com/Reiers/curio-core/internal/engine"
+	"github.com/Reiers/curio-core/internal/setupweb"
 )
 
 func main() {
@@ -39,6 +46,11 @@ func main() {
 	case "probe":
 		if err := cmdProbe(args); err != nil {
 			fmt.Fprintf(os.Stderr, "curio-core probe: %v\n", err)
+			os.Exit(1)
+		}
+	case "run":
+		if err := cmdRun(args); err != nil {
+			fmt.Fprintf(os.Stderr, "curio-core run: %v\n", err)
 			os.Exit(1)
 		}
 	case "version":
@@ -59,11 +71,13 @@ func usage() {
 
 Subcommands:
   probe          smoke-test the embedded Lantern daemon
+  run            start the daemon: Lantern + harmonytask engine + WebUI
   version        print version
   help           this message
 
 Run 'curio-core probe' to confirm the embedded daemon anchors against
 the Filecoin gateway and the Lantern <-> Curio Core boundary is intact.
+Run 'curio-core run --help' for the long-running daemon's flags.
 `)
 }
 
@@ -162,4 +176,180 @@ func defaultDataDir() string {
 		return "/tmp/curio-core"
 	}
 	return filepath.Join(home, ".curio-core")
+}
+
+// cmdRun boots the full curio-core daemon: embedded Lantern, the
+// harmonytask engine wired against harmonysqlite, and the WebUI with
+// the first-run /setup flow. It blocks until SIGINT/SIGTERM (or, on
+// error, a sub-component shutdown), then unwinds in the reverse order
+// it brought things up.
+func cmdRun(args []string) error {
+	fs := flag.NewFlagSet("run", flag.ExitOnError)
+	dataDir := fs.String("data-dir", defaultDataDir(), "Local data directory (wallet + headerstore live here)")
+	gateway := fs.String("gateway", "https://gateway.lantern.reiers.io", "Lantern gateway URL")
+	dbPath := fs.String("db-path", "", "Path to the harmonysqlite state DB (default: <data-dir>/state.sqlite)")
+	listenAddr := fs.String("listen", "127.0.0.1:4711", "HTTP listen address for the WebUI / /setup flow")
+	noLantern := fs.Bool("no-lantern", false, "Skip the embedded Lantern daemon (engine + WebUI only; useful for first-run setup on a host without gateway access yet)")
+	lanternTimeout := fs.Duration("lantern-anchor-timeout", 30*time.Second, "Time to wait for Lantern to reach Started state during boot")
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, `Usage: curio-core run [flags]
+
+Start the curio-core daemon: embedded Lantern, the harmonytask engine
+wired against the SQLite state DB, and the WebUI with the first-run
+/setup flow.
+
+Flags:
+`)
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(*dataDir, 0o700); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+	if *dbPath == "" {
+		*dbPath = filepath.Join(*dataDir, "state.sqlite")
+	}
+
+	rootCtx, cancelRoot := context.WithCancel(context.Background())
+	defer cancelRoot()
+
+	// --- Bring up the engine ---
+	fmt.Printf("curio-core run: starting daemon\n")
+	fmt.Printf("  data-dir: %s\n", *dataDir)
+	fmt.Printf("  db-path:  %s\n", *dbPath)
+	fmt.Printf("  listen:   %s\n", *listenAddr)
+
+	eng, err := engine.New(rootCtx, engine.Config{DBPath: *dbPath})
+	if err != nil {
+		return fmt.Errorf("engine.New: %w", err)
+	}
+	if err := eng.Start(rootCtx); err != nil {
+		_ = eng.Stop()
+		return fmt.Errorf("engine.Start: %w", err)
+	}
+	fmt.Printf("  engine:   %d task types registered\n", eng.Registry().Len())
+
+	// --- First-run probe ---
+	st, err := config.Status(rootCtx, eng.DB())
+	if err != nil {
+		_ = eng.Stop()
+		return fmt.Errorf("first-run status: %w", err)
+	}
+	if st.NeedsSetup {
+		fmt.Printf("Setup required. Open http://%s/setup in a browser to complete.\n", *listenAddr)
+	} else {
+		fmt.Printf("  config:   default layer present (%d field(s) configured)\n", 3)
+	}
+
+	// --- Optional Lantern ---
+	var lanternDaemon *lantern.Daemon
+	if !*noLantern {
+		w, err := wallet.New(rootCtx, filepath.Join(*dataDir, "keystore"), "")
+		if err != nil {
+			_ = eng.Stop()
+			return fmt.Errorf("create wallet: %w", err)
+		}
+		lanternDaemon, err = lantern.New(lantern.Config{
+			DataDir:      *dataDir,
+			Wallet:       w,
+			Gateway:      *gateway,
+			NoLibp2p:     true,
+			EmbeddedMode: true,
+		})
+		if err != nil {
+			_ = eng.Stop()
+			return fmt.Errorf("new lantern daemon: %w", err)
+		}
+		lanternErr := make(chan error, 1)
+		go func() { lanternErr <- lanternDaemon.Start(rootCtx) }()
+
+		deadline := time.Now().Add(*lanternTimeout)
+		for time.Now().Before(deadline) {
+			if lanternDaemon.Started() {
+				break
+			}
+			select {
+			case err := <-lanternErr:
+				_ = eng.Stop()
+				return fmt.Errorf("lantern exited before Started: %w", err)
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+		if !lanternDaemon.Started() {
+			_ = eng.Stop()
+			return fmt.Errorf("lantern did not reach Started state within %s", *lanternTimeout)
+		}
+		tr := lanternDaemon.TrustedRoot()
+		fmt.Printf("  lantern:  anchored at epoch %d\n", tr.Epoch)
+	} else {
+		fmt.Printf("  lantern:  skipped (--no-lantern)\n")
+	}
+
+	// --- HTTP server ---
+	handler := setupweb.New(eng.DB())
+	srv := &http.Server{
+		Addr:              *listenAddr,
+		Handler:           handler,
+		ReadTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+	}
+
+	ln, err := net.Listen("tcp", *listenAddr)
+	if err != nil {
+		_ = eng.Stop()
+		if lanternDaemon != nil {
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = lanternDaemon.Stop(stopCtx)
+			stopCancel()
+		}
+		return fmt.Errorf("http listen: %w", err)
+	}
+	fmt.Printf("  webui:    http://%s/\n", ln.Addr())
+
+	serveErr := make(chan error, 1)
+	go func() {
+		err := srv.Serve(ln)
+		if !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+			return
+		}
+		serveErr <- nil
+	}()
+
+	fmt.Printf("\ncurio-core is running. Ctrl-C to stop.\n")
+
+	// --- Signal wait ---
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case s := <-sig:
+		fmt.Printf("\nreceived %s; shutting down...\n", s)
+	case err := <-serveErr:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "http server error: %v\n", err)
+		}
+	}
+
+	// --- Shutdown, in reverse order ---
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	_ = srv.Shutdown(shutdownCtx)
+
+	if lanternDaemon != nil {
+		if err := lanternDaemon.Stop(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "lantern stop: %v\n", err)
+		}
+	}
+
+	if err := eng.Stop(); err != nil {
+		return fmt.Errorf("engine.Stop: %w", err)
+	}
+
+	fmt.Printf("Stopped cleanly.\n")
+	return nil
 }
