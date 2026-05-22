@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <title>JSON Schema Editor</title>
+    <script type="module" src="/ux/curio-ux.mjs"></script>
+    <script type="module" src="/ux/components/Drawer.mjs"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@2.14.0/dist/jsoneditor.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/ui-darkness/jquery-ui.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/ui-darkness/theme.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+<body style="visibility: hidden;">
+    <style>
+        #saveButton {
+            display: block;
+            position: fixed;
+            bottom: 20px;
+            right: 30px;
+            z-index: 99;
+            font-size: 18px;
+            border: none;
+            outline: none;
+            background-color: green;
+            color: white;
+            cursor: pointer;
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        #saveButton:hover {
+            background-color: #555;
+        }
+
+        .help-button button {
+            font-size: 24px;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            position: fixed;
+            bottom: 20px;
+            right: 120px;
+            z-index: 99;
+        }
+
+        .help-text {
+            display: none;
+            position: fixed;
+            border: 1px solid #ccc;
+            background-color: gray;
+            padding: 10px;
+            width: 200px;
+            bottom: 20px;
+            right: 200px;
+            z-index: 100;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        /* History sidebar */
+        #historySidebar {
+            position: fixed;
+            top: 60px;
+            right: 0;
+            width: 300px;
+            height: calc(100vh - 60px);
+            background-color: #1a1a2e;
+            border-left: 1px solid #333;
+            z-index: 90;
+            overflow-y: auto;
+            display: none;
+            padding: 0;
+        }
+
+        #historySidebar.open {
+            display: block;
+        }
+
+        #historySidebar .sidebar-header {
+            padding: 12px 15px;
+            border-bottom: 1px solid #333;
+            font-weight: bold;
+            font-size: 14px;
+            color: #ccc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            background-color: #1a1a2e;
+            z-index: 1;
+        }
+
+        .history-entry {
+            padding: 10px 15px;
+            border-bottom: 1px solid #2a2a3e;
+            cursor: pointer;
+            font-size: 13px;
+            color: #8b949e;
+            transition: background-color 0.15s;
+        }
+
+        .history-entry:hover {
+            background-color: #2a2a3e;
+        }
+
+        .history-entry.active {
+            background-color: #30304a;
+            border-left: 3px solid #58a6ff;
+        }
+
+        .history-entry .entry-time {
+            color: #6e7681;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+
+        #historyToggle {
+            position: fixed;
+            top: 70px;
+            right: 15px;
+            z-index: 99;
+            font-size: 13px;
+            border: 1px solid #444;
+            background-color: #1a1a2e;
+            color: #ccc;
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 4px;
+        }
+
+        #historyToggle:hover {
+            background-color: #2a2a3e;
+        }
+
+        /* Diff view */
+        #diffPanel {
+            display: none;
+            margin-top: 20px;
+        }
+
+        #diffPanel .diff-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .diff-container {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-all;
+            background-color: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 12px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .diff-line-add {
+            background-color: rgba(46, 160, 67, 0.15);
+            color: #3fb950;
+        }
+
+        .diff-line-remove {
+            background-color: rgba(248, 81, 73, 0.15);
+            color: #f85149;
+        }
+
+        .diff-line-context {
+            color: #8b949e;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .show {
+            display: block;
+        }
+
+        /* Fix for dark mode */
+        .card.bg-light {
+            background-color: rgb(11, 22, 34) !important;
+        }
+        input.form-control {
+            background: #111;
+            color: white;
+            font-weight: bold;
+        }
+
+        /* Hide the info button tooltips */
+        .jsoneditor-twbs5-text-button[data-toggle="tooltip"] {
+            display: none !important;
+        }
+        
+        /* Style for field descriptions that we'll inject */
+        .field-description {
+            display: block;
+            color: #aaa;
+            font-size: 0.875rem;
+            margin-top: 4px;
+            margin-bottom: 8px;
+            font-style: italic;
+            line-height: 1.4;
+            max-width: 100%;
+            white-space: pre-wrap;
+        }
+    </style>
+    <curio-ux>
+        <section class="section container-fluid implementations">
+            <div class="row justify-content-center content">
+                <div class="col-md-8">
+                    <div>
+                        <button id="saveButton" class="saveButton">Save</button>
+                    </div>
+
+                    <!-- Diff panel (shown below editor when a history entry is selected) -->
+                    <div id="diffPanel">
+                        <div class="diff-header">
+                            <h6 id="diffTitle" class="text-muted mb-0"></h6>
+                            <button class="btn btn-sm btn-outline-secondary" id="closeDiff">&times; Close</button>
+                        </div>
+                        <div class="diff-container" id="diffOutput"></div>
+                    </div>
+
+                    <!-- History sidebar toggle -->
+                    <button id="historyToggle">&#9776; History</button>
+
+                    <!-- History sidebar -->
+                    <div id="historySidebar">
+                        <div class="sidebar-header">
+                            <span>&#128337; Change History</span>
+                            <button class="btn btn-sm btn-outline-secondary py-0 px-1" id="closeSidebar">&times;</button>
+                        </div>
+                        <div id="historyList">
+                            <p class="text-muted p-3" style="font-size:13px;">Loading...</p>
+                        </div>
+                    </div>
+
+                    <div class="help-button">
+                        <button id="helpBtn">?</button>
+                        <p id="helpText" class="hidden help-text">Checking a box and entering a non default value will uncomment the corresponding configuration variable.
+                            Unchecking a box will reset the value to default.</p>
+                    </div>
+
+                    <div id="editor" data-bs-theme="dark"></div>
+                    <script>
+                        var editor;
+                        var urlParams = new URLSearchParams(window.location.search);
+                        var layer = urlParams.get('layer');
+                        // Make simultaneous GET requests to fetch the existing data and JSON Schema
+                        const layerPath = layer === 'default' ? 'config/default' : `config/layers/${layer}`;
+                        Promise.all([
+                            axios.get(`/api/${layerPath}`),
+                            axios.get('/api/config/schema')
+                        ])
+                            .then(responses => {
+                                const existingData = responses[0].data;
+                                const schema = responses[1].data;
+
+                                // Create a JSON Editor instance and pass the schema and existing data
+                                const container = document.getElementById('editor');
+                                const options = {
+                                    mode: 'tree',
+                                    schema: schema,
+                                    startval: existingData,
+                                    theme: 'bootstrap5',
+                                    iconlib: 'jqueryui',
+                                    show_opt_in: true,
+                                    disable_edit_json: true,
+                                    form_name_root: "Configuration",
+                                    disable_properties: true,
+                                    show_errors: "always",
+                                    display_required_only: false,
+                                    remove_button_labels: false,
+                                };
+
+                                editor = new JSONEditor(container, options);
+
+                                // Function to convert tooltip buttons to visible descriptions
+                                function showDescriptions() {
+                                    const infoButtons = document.querySelectorAll('.jsoneditor-twbs5-text-button[data-toggle="tooltip"]');
+                                    infoButtons.forEach(button => {
+                                        // Bootstrap 5 moves title to data-bs-original-title
+                                        const description = button.getAttribute('data-bs-original-title') || button.getAttribute('title');
+                                        if (description) {
+                                            // Create a description div
+                                            const descDiv = document.createElement('div');
+                                            descDiv.className = 'field-description';
+                                            descDiv.textContent = description.replace(/&quot;/g, '"');
+                                            
+                                            // Find the parent form group and insert description
+                                            let parent = button.closest('.form-group');
+                                            if (!parent) {
+                                                parent = button.closest('.card-body');
+                                            }
+                                            if (!parent) {
+                                                parent = button.parentElement;
+                                            }
+                                            
+                                            // Check if description hasn't been added already
+                                            if (parent && !parent.querySelector('.field-description')) {
+                                                parent.appendChild(descDiv);
+                                            }
+                                        }
+                                    });
+                                }
+
+                                // Call after editor is ready and on any changes
+                                editor.on('ready', function() {
+                                    showDescriptions();
+                                });
+                                
+                                // Re-run when editor changes (for dynamic fields)
+                                editor.on('change', function() {
+                                    setTimeout(showDescriptions, 100);
+                                });
+
+                                document.getElementById("helpBtn").addEventListener("click", function() {
+                                    var helpText = document.getElementById("helpText");
+                                    if (helpText.classList.contains("hidden")) {
+                                        helpText.classList.remove("hidden");
+                                        helpText.classList.add("show");
+                                    } else {
+                                        helpText.classList.remove("show");
+                                        helpText.classList.add("hidden");
+                                    }
+                                });
+
+                                // Attach function to saveButton click event
+                                var saveButton = document.getElementById('saveButton');
+                                saveButton.addEventListener('click', function() {
+                                    if (layer === 'default'){
+                                        alert('Error: cannot edit defaults');
+                                    } else {
+                                        const value = editor.getValue();
+                                        function cleanEmptyArrays(json) {
+                                            if (Array.isArray(json)) {
+                                                return json.filter(item => item !== ""); // Remove empty strings from arrays
+                                            } else if (typeof json === "object" && json !== null) {
+                                                Object.keys(json).forEach(key => {
+                                                    json[key] = cleanEmptyArrays(json[key]); // Recursively clean nested structures
+                                                });
+                                            }
+                                            return json;
+                                        }
+                                        cleanEmptyArrays(value);
+                                        console.log(value)
+                                        axios.post('/api/config/layers/' + layer, value)
+                                            .then(response => {
+                                                // Set cookie named 'message' with the value 'Data saved successfully'
+                                                document.cookie = 'message=The layer "' + layer + '" saved successfully. Please restart all nodes using the layer "' + layer + '".; path=/;';
+                                                window.location.href = '/pages/config/list/';
+                                            })
+                                            .catch(error => {
+                                                alert('Error saving data:', error);
+                                            });
+                                    }
+                                });
+
+                                // History sidebar feature
+                                var sidebar = document.getElementById('historySidebar');
+                                var historyList = document.getElementById('historyList');
+                                var historyToggle = document.getElementById('historyToggle');
+                                var diffPanel = document.getElementById('diffPanel');
+                                var diffOutput = document.getElementById('diffOutput');
+                                var diffTitle = document.getElementById('diffTitle');
+
+                                if (layer === 'default') {
+                                    historyToggle.style.display = 'none';
+                                }
+
+                                historyToggle.addEventListener('click', function() {
+                                    sidebar.classList.toggle('open');
+                                    if (sidebar.classList.contains('open')) {
+                                        loadHistory();
+                                    }
+                                });
+
+                                document.getElementById('closeSidebar').addEventListener('click', function() {
+                                    sidebar.classList.remove('open');
+                                });
+
+                                document.getElementById('closeDiff').addEventListener('click', function() {
+                                    diffPanel.style.display = 'none';
+                                    // Deselect active entry
+                                    var active = historyList.querySelector('.history-entry.active');
+                                    if (active) active.classList.remove('active');
+                                });
+
+                                function loadHistory() {
+                                    historyList.innerHTML = '<p class="text-muted p-3" style="font-size:13px;">Loading...</p>';
+                                    axios.get('/api/config/history/' + layer)
+                                        .then(function(resp) {
+                                            var entries = resp.data;
+                                            if (!entries || entries.length === 0) {
+                                                historyList.innerHTML = '<p class="text-muted p-3" style="font-size:13px;">No changes recorded yet.</p>';
+                                                return;
+                                            }
+                                            var html = '';
+                                            entries.forEach(function(entry, idx) {
+                                                var dt = new Date(entry.changed_at);
+                                                var dateStr = dt.toLocaleDateString(undefined, {month:'short', day:'numeric'});
+                                                var timeStr = dt.toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit'});
+                                                html += '<div class="history-entry" data-id="' + entry.id + '">';
+                                                html += '<div class="entry-time">' + dateStr + ' ' + timeStr + '</div>';
+                                                html += '</div>';
+                                            });
+                                            historyList.innerHTML = html;
+
+                                            historyList.querySelectorAll('.history-entry').forEach(function(el) {
+                                                el.addEventListener('click', function() {
+                                                    // Mark active
+                                                    historyList.querySelectorAll('.history-entry').forEach(function(e) { e.classList.remove('active'); });
+                                                    this.classList.add('active');
+                                                    loadDiff(this.getAttribute('data-id'));
+                                                });
+                                            });
+                                        })
+                                        .catch(function(err) {
+                                            historyList.innerHTML = '<p class="text-danger p-3" style="font-size:13px;">Failed to load history.</p>';
+                                        });
+                                }
+
+                                function loadDiff(entryId) {
+                                    diffPanel.style.display = 'block';
+                                    diffOutput.textContent = 'Loading...';
+                                    diffTitle.textContent = '';
+
+                                    axios.get('/api/config/history/' + layer + '/' + entryId)
+                                        .then(function(resp) {
+                                            var entry = resp.data;
+                                            var dt = new Date(entry.changed_at);
+                                            diffTitle.textContent = dt.toLocaleString() + ' → current';
+                                            diffOutput.innerHTML = computeDiff(entry.old_config, entry.new_config);
+                                        })
+                                        .catch(function(err) {
+                                            diffOutput.innerHTML = '<span class="text-danger">Failed to load diff.</span>';
+                                        });
+                                }
+
+                                function computeDiff(oldText, newText) {
+                                    var oldLines = oldText.split('\n');
+                                    var newLines = newText.split('\n');
+                                    var html = '';
+                                    var m = oldLines.length;
+                                    var n = newLines.length;
+
+                                    var dp = [];
+                                    for (var i = 0; i <= m; i++) {
+                                        dp[i] = [];
+                                        for (var j = 0; j <= n; j++) {
+                                            if (i === 0 || j === 0) {
+                                                dp[i][j] = 0;
+                                            } else if (oldLines[i - 1] === newLines[j - 1]) {
+                                                dp[i][j] = dp[i - 1][j - 1] + 1;
+                                            } else {
+                                                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                                            }
+                                        }
+                                    }
+
+                                    var result = [];
+                                    var i = m, j = n;
+                                    while (i > 0 || j > 0) {
+                                        if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+                                            result.unshift({ type: 'context', text: oldLines[i - 1] });
+                                            i--; j--;
+                                        } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+                                            result.unshift({ type: 'add', text: newLines[j - 1] });
+                                            j--;
+                                        } else {
+                                            result.unshift({ type: 'remove', text: oldLines[i - 1] });
+                                            i--;
+                                        }
+                                    }
+
+                                    result.forEach(function(line) {
+                                        var escaped = line.text
+                                            .replace(/&/g, '&amp;')
+                                            .replace(/</g, '&lt;')
+                                            .replace(/>/g, '&gt;');
+                                        if (line.type === 'add') {
+                                            html += '<div class="diff-line-add">+ ' + escaped + '</div>';
+                                        } else if (line.type === 'remove') {
+                                            html += '<div class="diff-line-remove">- ' + escaped + '</div>';
+                                        } else {
+                                            html += '<div class="diff-line-context">  ' + escaped + '</div>';
+                                        }
+                                    });
+
+                                    return html || '<span class="text-muted">No differences found.</span>';
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error fetching data:', error);
+                            });
+                    </script>
+                </div>
+            </div>
+        </section>
+    </curio-ux>
+</body>
+</html>
