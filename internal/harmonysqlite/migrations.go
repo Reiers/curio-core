@@ -9,14 +9,14 @@ import (
 	"strings"
 )
 
-//go:embed migrations/*.sql
+//go:embed schema-curio-core/*.sql
 var migrationsFS embed.FS
 
 // listMigrationFiles returns the sorted list of migration filenames embedded
 // in the binary. Filenames are date-prefixed (YYYYMMDD-...) so lexical sort
 // matches application order.
 func listMigrationFiles() ([]string, error) {
-	entries, err := fs.ReadDir(migrationsFS, "migrations")
+	entries, err := fs.ReadDir(migrationsFS, "schema-curio-core")
 	if err != nil {
 		return nil, fmt.Errorf("read embedded migrations dir: %w", err)
 	}
@@ -79,7 +79,7 @@ func (d *DB) ApplyMigrations(ctx context.Context) error {
 		if _, ok := applied[name]; ok {
 			continue
 		}
-		body, err := migrationsFS.ReadFile("migrations/" + name)
+		body, err := migrationsFS.ReadFile("schema-curio-core/" + name)
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}

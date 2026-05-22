@@ -12,3 +12,8 @@
 .vscode/
 .idea/
 *.swp
+
+# Auto-synced from upstream Curio module cache by background tooling.
+# We intentionally don't track or apply these; the canonical SQLite
+# schema lives in internal/harmonysqlite/schema-curio-core/.
+internal/harmonysqlite/migrations/
