@@ -1,0 +1,111 @@
+-- Auto-translated from Postgres -> SQLite for Curio Core.
+-- Source: github.com/filecoin-project/curio harmony/harmonydb/sql/20260216-pdp-v0-save-cache.sql
+-- Translation pass: 2026-05-23 (Day 3 scaffolding).
+--
+-- Bulk substitutions applied:
+--   SERIAL/BIGSERIAL PRIMARY KEY -> INTEGER PRIMARY KEY AUTOINCREMENT
+--   TIMESTAMP[TZ] -> DATETIME
+--   BOOLEAN -> INTEGER, TRUE/FALSE -> 1/0
+--   BYTEA -> BLOB
+--   JSONB -> TEXT (JSON-serialized at the Go layer)
+--   <type>[] -> TEXT (JSON-encoded at the Go layer)
+--   UUID -> TEXT, FLOAT -> REAL
+--   NOW()/TIMEZONE('UTC',NOW())/CURRENT_TIMESTAMP AT TIME ZONE 'UTC' -> CURRENT_TIMESTAMP
+--
+-- TODO (manual): the source file contained PG-specific constructs that
+-- can't be auto-translated 1:1. Search for `-- TODO: PG-` markers below.
+-- Flagged constructs: DO $$ block
+--
+
+-- All columns marked for cache saving by default,
+-- `task_save_cache` will flip it to FALSE if piece size is too small for caching
+-- TODO: PG-DO-block (PostgreSQL procedural). Original kept verbatim.
+-- Translation strategy: split the DO block into the imperative SQL
+-- statements it would execute; SQLite has no procedural language.
+-- DO $$
+-- BEGIN
+--     IF NOT EXISTS (
+--         SELECT 1
+--         FROM information_schema.columns
+--         WHERE table_name = 'pdp_piecerefs'
+--           AND table_schema = current_schema()
+--           AND column_name = 'needs_save_cache'
+--     ) THEN
+--         ALTER TABLE pdp_piecerefs ADD COLUMN IF NOT EXISTS needs_save_cache INTEGER DEFAULT TRUE;
+--     END IF;
+-- END
+-- $$;
+
+
+-- TODO: PG-DO-block (PostgreSQL procedural). Original kept verbatim.
+-- Translation strategy: split the DO block into the imperative SQL
+-- statements it would execute; SQLite has no procedural language.
+-- DO $$
+-- BEGIN
+--     IF NOT EXISTS (
+--         SELECT 1
+--         FROM information_schema.columns
+--         WHERE table_name = 'pdp_piecerefs'
+--           AND table_schema = current_schema()
+--           AND column_name = 'save_cache_task_id'
+--     ) THEN
+--         ALTER TABLE pdp_piecerefs ADD COLUMN IF NOT EXISTS save_cache_task_id BIGINT DEFAULT NULL;
+--     END IF;
+-- END
+-- $$;
+
+
+-- TODO: PG-DO-block (PostgreSQL procedural). Original kept verbatim.
+-- Translation strategy: split the DO block into the imperative SQL
+-- statements it would execute; SQLite has no procedural language.
+-- DO $$
+-- BEGIN
+--     IF NOT EXISTS (
+--         SELECT 1
+--         FROM information_schema.columns
+--         WHERE table_name = 'pdp_piecerefs'
+--           AND table_schema = current_schema()
+--           AND column_name = 'caching_task_started'
+--     ) THEN
+--         ALTER TABLE pdp_piecerefs ADD COLUMN IF NOT EXISTS caching_task_started DATETIME DEFAULT NULL;
+--     END IF;
+-- END
+-- $$;
+
+
+-- TODO: PG-DO-block (PostgreSQL procedural). Original kept verbatim.
+-- Translation strategy: split the DO block into the imperative SQL
+-- statements it would execute; SQLite has no procedural language.
+-- DO $$
+-- BEGIN
+--     IF NOT EXISTS (
+--         SELECT 1
+--         FROM information_schema.columns
+--         WHERE table_name = 'pdp_piecerefs'
+--           AND table_schema = current_schema()
+--           AND column_name = 'caching_task_completed'
+--     ) THEN
+--         ALTER TABLE pdp_piecerefs ADD COLUMN IF NOT EXISTS caching_task_completed DATETIME DEFAULT NULL;
+--     END IF;
+-- END
+-- $$;
+
+
+-- Track consecutive cached proofgen failures, due to cache misses or otherwise, strictly for monitoring
+-- TODO: PG-DO-block (PostgreSQL procedural). Original kept verbatim.
+-- Translation strategy: split the DO block into the imperative SQL
+-- statements it would execute; SQLite has no procedural language.
+-- DO $$
+-- BEGIN
+--     IF NOT EXISTS (
+--         SELECT 1
+--         FROM information_schema.columns
+--         WHERE table_name = 'pdp_piecerefs'
+--           AND table_schema = current_schema()
+--           AND column_name = 'cached_proofgen_failure_count'
+--     ) THEN
+--         ALTER TABLE pdp_piecerefs ADD COLUMN IF NOT EXISTS cached_proofgen_failure_count INTEGER DEFAULT 0;
+--     END IF;
+-- END
+-- $$;
+

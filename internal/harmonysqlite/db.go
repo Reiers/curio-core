@@ -31,6 +31,11 @@ type Config struct {
 
 	// ForeignKeys turns on foreign key enforcement. Default true.
 	ForeignKeys bool
+
+	// SkipMigrations disables the automatic ApplyMigrations call inside
+	// New(). Open() never auto-applies migrations regardless of this
+	// flag; only New() does. Default false (i.e. New does apply).
+	SkipMigrations bool
 }
 
 // DB is the SQLite-backed connection handle. Construct via Open.
@@ -69,6 +74,27 @@ func Open(cfg Config) (*DB, error) {
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
 	return &DB{sql: s, cfg: cfg}, nil
+}
+
+// New is the recommended constructor for production code: it opens the DB
+// (same as Open) and, unless cfg.SkipMigrations is set, applies every
+// embedded harmonydb migration in order before returning.
+//
+// On any migration failure the DB is closed and the error is returned;
+// the caller gets nil.
+func New(ctx context.Context, cfg Config) (*DB, error) {
+	d, err := Open(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.SkipMigrations {
+		return d, nil
+	}
+	if err := d.ApplyMigrations(ctx); err != nil {
+		_ = d.Close()
+		return nil, fmt.Errorf("apply migrations: %w", err)
+	}
+	return d, nil
 }
 
 // Close closes the underlying database/sql handle.

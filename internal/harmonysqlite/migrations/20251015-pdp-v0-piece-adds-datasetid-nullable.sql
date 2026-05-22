@@ -1,0 +1,64 @@
+-- Auto-translated from Postgres -> SQLite for Curio Core.
+-- Source: github.com/filecoin-project/curio harmony/harmonydb/sql/20251015-pdp-v0-piece-adds-datasetid-nullable.sql
+-- Translation pass: 2026-05-23 (Day 3 scaffolding).
+--
+-- Bulk substitutions applied:
+--   SERIAL/BIGSERIAL PRIMARY KEY -> INTEGER PRIMARY KEY AUTOINCREMENT
+--   TIMESTAMP[TZ] -> DATETIME
+--   BOOLEAN -> INTEGER, TRUE/FALSE -> 1/0
+--   BYTEA -> BLOB
+--   JSONB -> TEXT (JSON-serialized at the Go layer)
+--   <type>[] -> TEXT (JSON-encoded at the Go layer)
+--   UUID -> TEXT, FLOAT -> REAL
+--   NOW()/TIMEZONE('UTC',NOW())/CURRENT_TIMESTAMP AT TIME ZONE 'UTC' -> CURRENT_TIMESTAMP
+--
+-- TODO (manual): the source file contained PG-specific constructs that
+-- can't be auto-translated 1:1. Search for `-- TODO: PG-` markers below.
+-- Flagged constructs: DO $$ block, DROP CONSTRAINT (limited in SQLite)
+--
+
+-- This file was update on 16th April 2026 to change the primary key from Yugabyte specific to Postgres style.
+-- Any SP, which has already run this file, will never run again. So, new file 20260414-pdp-v0-fix-add-piece-constraints.sql
+-- will fix the constraint for them if required. New SPs will get the correct constraint from here.
+-- Note: This goes against best practices of never changing the already executed SQL files. This is the only exception.
+
+
+-- Changes the data_set column to be nullable in the pdp_data_set_piece_adds table to faciliate create-and-add workflow.
+-- Combined migration: make `data_set` nullable and adjust PK
+-- New primary key: (add_message_hash, add_message_index)
+-- Old primary key: (data_set, add_message_hash, add_message_index)
+-- TODO: PG-DO-block (PostgreSQL procedural). Original kept verbatim.
+-- Translation strategy: split the DO block into the imperative SQL
+-- statements it would execute; SQLite has no procedural language.
+-- DO $$
+-- BEGIN
+--   -- Step 1: Drop existing PK if it still uses data_set
+--   IF EXISTS (
+--     SELECT 1
+--     FROM pg_constraint
+--     WHERE conname = 'pdp_data_set_piece_adds_pk'
+--       AND conrelid = to_regclass('pdp_data_set_piece_adds')
+--   ) THEN
+--     ALTER TABLE pdp_data_set_piece_adds
+--       DROP CONSTRAINT pdp_data_set_piece_adds_pk;
+--   END IF;
+-- 
+--   -- Step 2: Create new PK with add_message_hash as key
+--   ALTER TABLE pdp_data_set_piece_adds
+--     ADD CONSTRAINT pdp_data_set_piece_adds_pk
+--     PRIMARY KEY (add_message_hash, add_message_index);
+-- 
+-- 
+--   -- Step 3: Make `data_set` nullable if it is currently NOT NULL
+--   IF EXISTS (
+--     SELECT 1
+--     FROM information_schema.columns
+--     WHERE table_name = 'pdp_data_set_piece_adds'
+--       AND column_name = 'data_set'
+--       AND is_nullable = 'NO'
+--   ) THEN
+--     ALTER TABLE pdp_data_set_piece_adds
+--       ALTER COLUMN data_set DROP NOT NULL;
+--   END IF;
+-- END $$;
+
