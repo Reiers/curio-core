@@ -303,40 +303,23 @@ func BuildTaskRegistry() (*TaskRegistry, error) {
 		},
 		func() harmonytask.TaskTypeDetails { return pdp.NewPDPTaskDeletePiece(nil, nil, nil).TypeDetails() },
 		func() harmonytask.TaskTypeDetails { return pdp.NewTaskPDPSaveCache(nil, nil, nil).TypeDetails() },
+		// Day 6: the three constructors below previously panicked on nil
+		// chainSched. The Reiers/curio fork now nil-guards AddHandler so we
+		// can harvest TypeDetails() live here too. PDPInitPP / PDPProvingPeriod
+		// (named via NewNextProvingPeriodTask) / PDPProve.
+		func() harmonytask.TaskTypeDetails {
+			return pdp.NewInitProvingPeriodTask(nil, nil, nil, nil, nil).TypeDetails()
+		},
+		func() harmonytask.TaskTypeDetails {
+			return pdp.NewNextProvingPeriodTask(nil, nil, nil, nil, nil).TypeDetails()
+		},
+		func() harmonytask.TaskTypeDetails {
+			return pdp.NewProveTask(nil, nil, nil, nil, nil, nil, nil).TypeDetails()
+		},
 	}
 
 	for _, c := range safeCtors {
 		td := c()
-		if err := r.register(td); err != nil {
-			return nil, err
-		}
-	}
-
-	// PDP v1 tasks whose constructors are NOT safe to call with nil deps
-	// (chainsched.AddHandler is invoked in-line). Static descriptors
-	// here mirror their upstream TypeDetails verbatim — they're
-	// reconstructed in tests against the canonical names.
-	staticV1 := []harmonytask.TaskTypeDetails{
-		{
-			Name:        tasknames.PDPInitPP,
-			Max:         taskhelp.Max(50),
-			Cost:        resources.Resources{Cpu: 1, Ram: 64 << 20},
-			MaxFailures: 3,
-		},
-		{
-			Name:        tasknames.PDPProvingPeriod,
-			Max:         taskhelp.Max(50),
-			Cost:        resources.Resources{Cpu: 1, Ram: 64 << 20},
-			MaxFailures: 3,
-		},
-		{
-			Name:        tasknames.PDPProve,
-			Max:         taskhelp.Max(50),
-			Cost:        resources.Resources{Cpu: 1, Ram: 256 << 20},
-			MaxFailures: 5,
-		},
-	}
-	for _, td := range staticV1 {
 		if err := r.register(td); err != nil {
 			return nil, err
 		}
