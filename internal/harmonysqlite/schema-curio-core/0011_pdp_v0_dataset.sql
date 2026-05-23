@@ -90,6 +90,15 @@ CREATE TABLE IF NOT EXISTS pdp_data_set_piece_adds (
     PRIMARY KEY (add_message_hash, sub_piece_offset)
 );
 
+-- Mirrors filecoin-project/curio#1248 / PR#1198:
+-- The chain-notification consumer joins pdp_data_set_piece_adds against
+-- pdp_piecerefs by pdp_pieceref. Without this index that join is a
+-- full scan per-tipset, paralysing the consumer under load. Partial
+-- index on the non-null case keeps it small.
+CREATE INDEX IF NOT EXISTS pdp_data_set_piece_adds_pdp_pieceref_idx
+    ON pdp_data_set_piece_adds(pdp_pieceref)
+    WHERE pdp_pieceref IS NOT NULL;
+
 -- 20250930-pdp-v0-streaming-upload.sql
 -- Schema parity with upstream Curio's PostgreSQL version. The
 -- streaming-upload handler writes piece_size, raw_size, complete,
