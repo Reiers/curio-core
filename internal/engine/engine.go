@@ -42,7 +42,6 @@ import (
 	"github.com/filecoin-project/curio/harmony/harmonytask"
 	"github.com/filecoin-project/curio/harmony/resources"
 	"github.com/filecoin-project/curio/harmony/taskhelp"
-	"github.com/filecoin-project/curio/tasks/pdp"
 	"github.com/filecoin-project/curio/tasks/tasknames"
 
 	"github.com/Reiers/curio-core/internal/harmonysqlite"
@@ -281,49 +280,14 @@ func (r *TaskRegistry) Len() int { return len(r.byName) }
 // neither of which compiles under `CGO_ENABLED=0` today (Day 6's
 // carve-out fixes that). The static descriptors use `tasknames.PDPv0_*`
 // for naming consistency.
+//
+// Scope (2026-05-23, Andy via Nicklas): pdpv0-only. `tasks/pdp` (v1, the
+// mk20-deal-flow PDP) is intentionally NOT registered here. The v1
+// package + its `curio/market/mk20` transitive are out of scope for
+// curio-core. If v1 is reintroduced later, restore the safeCtors block
+// from git history at commit fd85e79.
 func BuildTaskRegistry() (*TaskRegistry, error) {
 	r := &TaskRegistry{byName: make(map[string]harmonytask.TaskTypeDetails, 32)}
-
-	// --- PDP v1: harvest from the upstream package where safe ---
-	// (See task_init_pp.go etc. — some constructors call chainSched.AddHandler
-	// in their bodies, which panics on nil. Those go in the static list below.)
-
-	type ctor func() harmonytask.TaskTypeDetails
-	safeCtors := []ctor{
-		func() harmonytask.TaskTypeDetails { return pdp.NewPDPNotifyTask(nil).TypeDetails() },
-		func() harmonytask.TaskTypeDetails { return pdp.NewPDPSyncTask(nil, nil).TypeDetails() },
-		func() harmonytask.TaskTypeDetails {
-			return pdp.NewPDPTaskAddDataSet(nil, nil, nil, nil).TypeDetails()
-		},
-		func() harmonytask.TaskTypeDetails { return pdp.NewPDPTaskAddPiece(nil, nil, nil).TypeDetails() },
-		func() harmonytask.TaskTypeDetails { return pdp.NewAggregatePDPDealTask(nil, nil).TypeDetails() },
-		func() harmonytask.TaskTypeDetails { return pdp.NewPDPCommpTask(nil, nil, 1).TypeDetails() },
-		func() harmonytask.TaskTypeDetails {
-			return pdp.NewPDPTaskDeleteDataSet(nil, nil, nil, nil).TypeDetails()
-		},
-		func() harmonytask.TaskTypeDetails { return pdp.NewPDPTaskDeletePiece(nil, nil, nil).TypeDetails() },
-		func() harmonytask.TaskTypeDetails { return pdp.NewTaskPDPSaveCache(nil, nil, nil).TypeDetails() },
-		// Day 6: the three constructors below previously panicked on nil
-		// chainSched. The Reiers/curio fork now nil-guards AddHandler so we
-		// can harvest TypeDetails() live here too. PDPInitPP / PDPProvingPeriod
-		// (named via NewNextProvingPeriodTask) / PDPProve.
-		func() harmonytask.TaskTypeDetails {
-			return pdp.NewInitProvingPeriodTask(nil, nil, nil, nil, nil).TypeDetails()
-		},
-		func() harmonytask.TaskTypeDetails {
-			return pdp.NewNextProvingPeriodTask(nil, nil, nil, nil, nil).TypeDetails()
-		},
-		func() harmonytask.TaskTypeDetails {
-			return pdp.NewProveTask(nil, nil, nil, nil, nil, nil, nil).TypeDetails()
-		},
-	}
-
-	for _, c := range safeCtors {
-		td := c()
-		if err := r.register(td); err != nil {
-			return nil, err
-		}
-	}
 
 	// --- PDP v0: static descriptors (package not yet importable). ---
 	// Day 6 swaps these for live `pdpv0.New*` calls once the lotus

@@ -9,8 +9,9 @@ import (
 
 // TestNew_InMemory asserts that an engine can be constructed against
 // an in-memory SQLite, that the task registry holds entries for every
-// PDP v1 + PDP v0 task name we expect Day 5 to ship with, and that
-// Start → Healthy → Stop is a clean cycle.
+// PDP v0 task name we expect to ship with (pdpv0-only scope per Andy
+// 2026-05-23; v1 is intentionally out of scope), and that Start →
+// Healthy → Stop is a clean cycle.
 func TestNew_InMemory(t *testing.T) {
 	ctx := context.Background()
 	e, err := New(ctx, Config{DBPath: ":memory:"})
@@ -26,33 +27,9 @@ func TestNew_InMemory(t *testing.T) {
 		t.Fatal("Registry() returned nil after New")
 	}
 
-	// --- Required PDP v1 names ---
-	wantV1 := []string{
-		tasknames.PDPNotify,
-		tasknames.PDPSync,
-		tasknames.PDPAddDataSet,
-		tasknames.PDPAddPiece,
-		tasknames.AggregatePDPDeal,
-		tasknames.PDPCommP,
-		tasknames.PDPDelDataSet,
-		tasknames.PDPDeletePiece,
-		tasknames.PDPSaveCache,
-		tasknames.PDPInitPP,
-		tasknames.PDPProvingPeriod,
-		tasknames.PDPProve,
-	}
-	for _, name := range wantV1 {
-		if !e.Registry().Has(name) {
-			t.Errorf("PDP v1 task %q missing from registry", name)
-		}
-		td, ok := e.Registry().Get(name)
-		if !ok {
-			continue
-		}
-		if td.Name != name {
-			t.Errorf("PDP v1 task %q: TypeDetails.Name = %q, want %q", name, td.Name, name)
-		}
-	}
+	// --- pdpv0-only: v1 (`tasks/pdp`) intentionally not registered ---
+	// If v1 is reintroduced later, restore the wantV1 block from git
+	// history at commit fd85e79.
 
 	// --- Required PDP v0 names ---
 	wantV0 := []string{
@@ -88,9 +65,21 @@ func TestNew_InMemory(t *testing.T) {
 		}
 		seen[n] = true
 	}
-	if got, want := len(names), len(wantV1)+len(wantV0); got != want {
-		t.Errorf("Registry.Len() = %d, want %d (v1: %d + v0: %d)",
-			got, len(wantV1), len(wantV0), want)
+	if got, want := len(names), len(wantV0); got != want {
+		t.Errorf("Registry.Len() = %d, want %d (pdpv0-only)", got, want)
+	}
+
+	// --- pdpv0-only invariant: v1 task names must NOT be present ---
+	forbiddenV1 := []string{
+		tasknames.PDPNotify, tasknames.PDPSync, tasknames.PDPAddDataSet,
+		tasknames.PDPAddPiece, tasknames.AggregatePDPDeal, tasknames.PDPCommP,
+		tasknames.PDPDelDataSet, tasknames.PDPDeletePiece, tasknames.PDPSaveCache,
+		tasknames.PDPInitPP, tasknames.PDPProvingPeriod, tasknames.PDPProve,
+	}
+	for _, name := range forbiddenV1 {
+		if e.Registry().Has(name) {
+			t.Errorf("pdpv0-only invariant violated: v1 task %q present in registry", name)
+		}
 	}
 
 	// --- Healthy() lifecycle: false → true → false ---
@@ -145,11 +134,13 @@ func TestBuildTaskRegistry_Standalone(t *testing.T) {
 		t.Fatal("BuildTaskRegistry: empty registry")
 	}
 
-	// Spot-check a high-value name from each family.
-	for _, name := range []string{tasknames.PDPNotify, tasknames.PDPv0_Notify} {
-		if _, ok := r.Get(name); !ok {
-			t.Errorf("expected task %q in registry", name)
-		}
+	// Spot-check a high-value pdpv0 task name. (pdpv0-only scope: v1
+	// names are explicitly NOT registered.)
+	if _, ok := r.Get(tasknames.PDPv0_Notify); !ok {
+		t.Errorf("expected task %q in registry", tasknames.PDPv0_Notify)
+	}
+	if _, ok := r.Get(tasknames.PDPNotify); ok {
+		t.Errorf("pdpv0-only invariant violated: v1 task %q present", tasknames.PDPNotify)
 	}
 }
 
