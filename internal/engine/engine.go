@@ -42,6 +42,7 @@ import (
 	"github.com/filecoin-project/curio/harmony/harmonytask"
 	"github.com/filecoin-project/curio/harmony/resources"
 	"github.com/filecoin-project/curio/harmony/taskhelp"
+	"github.com/filecoin-project/curio/tasks/pdpv0"
 	"github.com/filecoin-project/curio/tasks/tasknames"
 
 	"github.com/Reiers/curio-core/internal/harmonysqlite"
@@ -176,16 +177,19 @@ func (e *Engine) Start(ctx context.Context) error {
 	// recordMachineRow) and hand-build a *resources.Reg with the resulting
 	// MachineID. Same end-state, just SQL-dialect-aware.
 	//
-	// impls is nil for the current wire-up. Even the simplest pdpv0
-	// task (PDPNotifyTask, ctor only takes ctx+db) can't be imported
-	// here without pulling the entire tasks/pdpv0 package into the
-	// compile graph — which transitively imports lotus/storage/sealer,
-	// which requires the !cgo carve-out tracked at curio-core#11.
+	// Wire the first real pdpv0 task: PDPNotifyTask. Constructor takes
+	// (ctx, db) only; no chain-API, no sender, no indexstore deps.
+	// The poll goroutine watches pdp_piece_uploads + parked_pieces;
+	// when an upload finishes, the task fires and the AddTaskFunc
+	// closure drives a real harmonytask transaction.
 	//
-	// Day 7 outcome: scheduler runs against SQLite (verified, polls
-	// every tick clean). pdpv0 task instance wire-up is gated on the
-	// darwin/linux+sealer carve-out from #11. Marking that #11 is now
-	// a Day 7 blocker, not a deferred convenience.
+	// This is the Day 7 milestone: a real upstream PDP task instance
+	// running inside curio-core, against SQLite, with the harmonytask
+	// scheduler driving it. Heavier pdpv0 tasks (Prove, NextPP, etc.)
+	// wire in as their chain-API/sender/indexstore deps come online.
+	notify := pdpv0.NewPDPNotifyTask(ctx, e.db)
+	impls := []harmonytask.TaskInterface{notify}
+
 	reg := &resources.Reg{
 		Resources: resources.Resources{
 			Cpu:       1,
@@ -194,7 +198,7 @@ func (e *Engine) Start(ctx context.Context) error {
 			MachineID: machineID,
 		},
 	}
-	te, err := harmonytask.NewWithReg(e.db, nil /* impls */, e.cfg.HostAndPort, nil /* peerConnector */, reg)
+	te, err := harmonytask.NewWithReg(e.db, impls, e.cfg.HostAndPort, nil /* peerConnector */, reg)
 	if err != nil {
 		e.running.Store(false)
 		return fmt.Errorf("engine: harmonytask.NewWithReg: %w", err)
