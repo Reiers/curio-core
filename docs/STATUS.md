@@ -2,13 +2,19 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-23 03:00 CEST** (after Day 6: lotus storage/paths carve-out + PDP v1 nil-guards + live v1 TypeDetails harvest).
+Last updated: **2026-05-23 11:35 CEST** (after Andy 3-for-3: pdpv0-only scope, drop mk12+market WebUI pages, fold web/ shim cleanup into existing CGo carve-out).
+
+## Scope (2026-05-23, Andy via Nicklas)
+
+- **pdpv0-only.** `tasks/pdp` (v1, mk20-deal-flow) is OUT. The `curio/market/mk20` transitive is no longer in our import graph.
+- **WebUI:** `pages/market/`, `pages/mk12-deal/`, `pages/mk12-deals/`, `pages/proofshare/`, `win-stats.mjs` all DROPPED. `pages/pdp/` is the operator deal-flow surface.
+- **`//go:build cgo` shim on `web/`:** fold-in to existing CGo carve-out (Reiers/curio `integ/task-pdp-pure-go` + Reiers/blooms). Scope-investigation 2026-05-23 found the remaining transitive deps are `lotus/storage/sealer` (worker_local, faults, manager_post), `curio/lib/proofsvc/common`, `curio/tasks/seal`, and `elastic/gosigar` (darwin sysctlbyname). Larger than the lib/paths split; deferred behind Day 7. Tracked at [Reiers/lantern#19](https://github.com/Reiers/lantern/issues/19) (extended scope) — no separate issue.
 
 ## What works today
 
 - `curio-core probe` boots an embedded Lantern, anchors against the live mainnet gateway, and shuts down cleanly. 25 MB pure-Go binary, `CGO_ENABLED=0`.
-- `curio-core run` starts the full daemon: SQLite state DB (auto-migrates) → harmonytask task registry (21 task types: 12 PDP v1 + 9 PDP v0) → first-run config probe → optional embedded Lantern → WebUI with `/setup` flow. SIGTERM unwinds cleanly. Verified end-to-end against a fresh data-dir.
-- `internal/engine` wraps the SQLite handle + task registry + lifecycle. Single-server (no Peering layer); `harmony_machines` stays a single-row table keyed by HostAndPort. All 12 PDP v1 task types now register via live `TypeDetails()` harvest (was 9 + 3 static); the three previously-static descriptors (PDPInitPP, PDPProvingPeriod, PDPProve) now use the live ctors after the Reiers/curio fork added nil-guards on their `chainSched.AddHandler` calls.
+- `curio-core run` starts the full daemon: SQLite state DB (auto-migrates) → harmonytask task registry (9 task types, pdpv0-only) → first-run config probe → optional embedded Lantern → WebUI with `/setup` flow. SIGTERM unwinds cleanly. Verified end-to-end against a fresh data-dir.
+- `internal/engine` wraps the SQLite handle + task registry + lifecycle. Single-server (no Peering layer); `harmony_machines` stays a single-row table keyed by HostAndPort. Registry holds 9 PDP v0 entries only (pdpv0-only scope per Andy 2026-05-23). The Day 6 v1 live-harvest work is preserved in git history at commit fd85e79 if v1 is ever reintroduced.
 - `internal/config` owns the `harmony_config` default-layer read/write (TOML-encoded `[Pdp]{MarketAddress, WalletAddress, MinerID}`).
 - `internal/setupweb` is the CGO-free /setup HTTP handler + middleware (redirect-to-/setup until configured, fall-through afterwards).
 - `internal/harmonysqlite` applies 14 migrations on `New()`, produces 55 SQLite tables (16 `pdp_*` + 39 infra), and passes its acceptance test suite (`go test ./internal/harmonysqlite/...`, 8 tests + ~50 subtests).
