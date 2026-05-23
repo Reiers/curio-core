@@ -67,6 +67,16 @@ func main() {
 			fmt.Fprintf(os.Stderr, "curio-core wallet: %v\n", err)
 			os.Exit(1)
 		}
+	case "doctor":
+		if err := cmdDoctor(args); err != nil {
+			fmt.Fprintf(os.Stderr, "curio-core doctor: %v\n", err)
+			os.Exit(1)
+		}
+	case "sp":
+		if err := cmdSP(args); err != nil {
+			fmt.Fprintf(os.Stderr, "curio-core sp: %v\n", err)
+			os.Exit(1)
+		}
 	case "version":
 		fmt.Println("curio-core 0.0.1-prealpha")
 	case "-h", "--help", "help":
@@ -87,6 +97,8 @@ Subcommands:
   probe          smoke-test the embedded Lantern daemon
   run            start the daemon: Lantern + harmonytask engine + WebUI
   wallet         operator wallet management (list, new, import, export, role, delete)
+  doctor         read-only health + DB ↔ chain reconciliation report
+  sp             SP registry operations (register, info)
   version        print version
   help           this message
 
