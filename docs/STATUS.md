@@ -2,7 +2,16 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-23 12:30 CEST** (after #5 carve-out resolution: linux+no-cgo build GREEN end to end; harmonytask DB-seam refactor is now the SOLE remaining Day 7 blocker).
+Last updated: **2026-05-23 13:00 CEST** (DB-seam refactor SHIPPED. The harmonytask scheduler goroutine is now running against SQLite. Day 7 blocker dropped.).
+
+## Milestone: harmonytask scheduler running on SQLite (2026-05-23)
+
+The DB-seam refactor landed across three forks:
+- `Reiers/harmonyquery@db-interface` — new `DBInterface` + `TxInterface` + `RawString` exported type
+- `Reiers/curio@db-seam-refactor` — `harmonytask.cfg.db` is now `harmonyquery.DBInterface`; ~123 call sites in tasks/pdpv0 + tasks/pdp use the `*I`-suffixed methods
+- `curio-core@HEAD` — `*harmonysqlite.DB` implements `DBInterface` via 4 wrapper methods; `engine.Start` calls `harmonytask.NewWithReg` with the SQLite handle
+
+`curio-core run` boot confirms the scheduler goroutine starts: the harmonytask poller hits the DB on the first iteration. (One SQL dialect mismatch remains in the poller: pgx-style array params vs sqlite — Day 7 follow-up, not blocking.)
 
 ## Milestone: linux+no-cgo build GREEN (2026-05-23)
 

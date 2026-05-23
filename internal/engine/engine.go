@@ -82,6 +82,10 @@ type Engine struct {
 
 	registry *TaskRegistry
 
+	// te is the harmonytask scheduler engine. Constructed in Start,
+	// drained in Stop. nil outside the running window.
+	te *harmonytask.TaskEngine
+
 	startedAt atomic.Value // time.Time, optional, zero until Start()
 	running   atomic.Bool
 
@@ -155,10 +159,42 @@ func (e *Engine) Start(ctx context.Context) error {
 		return errors.New("engine: already started")
 	}
 
-	if err := e.recordMachineRow(ctx); err != nil {
+	machineID, err := e.recordMachineRow(ctx)
+	if err != nil {
 		e.running.Store(false)
 		return fmt.Errorf("engine: record machine row: %w", err)
 	}
+
+	// Wire the harmonytask scheduler against our SQLite-backed
+	// *harmonysqlite.DB. The DB satisfies harmonyquery.DBInterface via the
+	// adapter in internal/harmonysqlite/dbinterface.go, so the upstream
+	// scheduler runs unmodified against SQLite.
+	//
+	// We bypass resources.Register because its upsert SQL uses Postgres
+	// CTE + RETURNING + $N placeholders that SQLite can't parse. Instead
+	// we record the machine row ourselves with SQLite-friendly SQL (see
+	// recordMachineRow) and hand-build a *resources.Reg with the resulting
+	// MachineID. Same end-state, just SQL-dialect-aware.
+	//
+	// impls is intentionally nil for the initial wire-up: the engine
+	// boot path exercises the scheduler's machine-registration and
+	// poller goroutines without any real PDP work. Day 7's calibration
+	// miner wires real *pdpv0.* task instances in once the chain-API +
+	// sender plumbing land.
+	reg := &resources.Reg{
+		Resources: resources.Resources{
+			Cpu:       1,
+			Gpu:       0,
+			Ram:       1 << 30,
+			MachineID: machineID,
+		},
+	}
+	te, err := harmonytask.NewWithReg(e.db, nil /* impls */, e.cfg.HostAndPort, nil /* peerConnector */, reg)
+	if err != nil {
+		e.running.Store(false)
+		return fmt.Errorf("engine: harmonytask.NewWithReg: %w", err)
+	}
+	e.te = te
 
 	return nil
 }
@@ -168,37 +204,49 @@ func (e *Engine) Start(ctx context.Context) error {
 // most one row per HostAndPort.
 //
 // We deliberately do NOT call resources.Register from the upstream
-// fork: that helper requires a `*harmonydb.DB` and shells out for
-// CPU/RAM probes. For Day 5 we just record a placeholder row so the
-// downstream code can read a non-empty harmony_machines.id when the
-// scheduler eventually wires in.
-func (e *Engine) recordMachineRow(ctx context.Context) error {
-	// SQLite uses INSERT...ON CONFLICT. host_and_port is not unique
-	// in upstream's schema, but curio-core is single-server and we
-	// keep at most one row keyed by host_and_port via a deterministic
-	// UPDATE-then-INSERT-if-zero pattern.
+// fork: that helper requires a Postgres-shaped CTE/RETURNING upsert
+// that SQLite can't parse. Instead we record the row ourselves and
+// return the resulting machine_id so the caller can hand-build a
+// *resources.Reg.
+func (e *Engine) recordMachineRow(ctx context.Context) (int, error) {
+	// UPDATE-first, INSERT-if-zero. host_and_port isn't unique in
+	// upstream's schema, but curio-core is single-server so we keep
+	// exactly one row keyed by HostAndPort.
 	res, err := e.db.Exec(ctx, `
 		UPDATE harmony_machines
 		   SET cpu = ?, ram = ?, gpu = ?, last_contact = CURRENT_TIMESTAMP
 		 WHERE host_and_port = ?`,
 		1, int64(1<<30), 0, e.cfg.HostAndPort)
 	if err != nil {
-		return fmt.Errorf("update harmony_machines: %w", err)
+		return 0, fmt.Errorf("update harmony_machines: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
+		return 0, fmt.Errorf("rows affected: %w", err)
 	}
 	if n == 0 {
 		if _, err := e.db.Exec(ctx, `
 			INSERT INTO harmony_machines (host_and_port, cpu, ram, gpu, last_contact)
 			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 			e.cfg.HostAndPort, 1, int64(1<<30), 0); err != nil {
-			return fmt.Errorf("insert harmony_machines: %w", err)
+			return 0, fmt.Errorf("insert harmony_machines: %w", err)
 		}
 	}
-	return nil
+
+	// Read back the row's ID for the Reg.
+	var id int
+	if err := e.db.QueryRow(ctx,
+		`SELECT id FROM harmony_machines WHERE host_and_port = ? ORDER BY id DESC LIMIT 1`,
+		e.cfg.HostAndPort,
+	).Scan(&id); err != nil {
+		return 0, fmt.Errorf("select machine_id: %w", err)
+	}
+	return id, nil
 }
+
+// te holds the harmonytask engine when running. nil before Start /
+// after Stop.
+// (declared as a field via the existing Engine struct further up.)
 
 // Stop shuts the engine down.
 //
@@ -211,6 +259,10 @@ func (e *Engine) Stop() error {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.te != nil {
+		e.te.GracefullyTerminate()
+		e.te = nil
+	}
 	if e.db != nil {
 		if err := e.db.Close(); err != nil {
 			e.stopErr = err
