@@ -2,7 +2,21 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-23 13:00 CEST** (DB-seam refactor SHIPPED. The harmonytask scheduler goroutine is now running against SQLite. Day 7 blocker dropped.).
+Last updated: **2026-05-23 13:40 CEST** (Day 7 partial: SQL dialect cleanup + Tx.SelectI shipped; the next blocker is #11 — sealer carve-out promoted from p3 deferred to p1 Day 7 blocker).
+
+## Day 7 status: partial
+
+Shipped today:
+- harmonytask scheduler runs against SQLite (#5)
+- ANY($N) -> IN(?,?,?) cross-backend SQL helper (curio-fork sqlhelpers.go)
+- harmonysqlite Tx.SelectI implementation (scany-backed)
+- curio-core run polls SQLite cleanly, no errors, indefinitely
+
+The wall:
+- Importing tasks/pdpv0 (to wire ANY task, even the trivial PDPNotifyTask)
+  compiles the whole pdpv0 package, which transitively imports
+  lotus/storage/sealer, which needs the !cgo carve-out from #11.
+- #11 promoted from p3 deferred to p1 Day 7 blocker.
 
 ## Milestone: harmonytask scheduler running on SQLite (2026-05-23)
 
