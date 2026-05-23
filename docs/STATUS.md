@@ -2,7 +2,15 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-23 13:40 CEST** (Day 7 partial: SQL dialect cleanup + Tx.SelectI shipped; the next blocker is #11 — sealer carve-out promoted from p3 deferred to p1 Day 7 blocker).
+Last updated: **2026-05-23 14:30 CEST** (Day 7 MILESTONE: PDPNotifyTask running inside curio-core, scheduled by harmonytask, against SQLite. The sealer wall sidestepped via piece-CID subpackage extraction).
+
+## Day 7 milestone hit
+
+A real upstream PDP task instance (`PDPNotifyTask`, unmodified from upstream Curio) is running inside curio-core, scheduled by harmonytask, polling SQLite for pdp_piece_uploads. 10 seconds of clean runtime, no errors. The scheduler architecture is proven end-to-end.
+
+The sealer carve-out (#11) was sidestepped, not solved: extracted the one function pdpv0 needed from the heavy `curio/pdp` package into a pure-Go subpackage `curio/pdp/piececid`. That cut the entire `curio/deps -> lotus/storage/sealer` transitive chain from pdpv0's import graph.
+
+Follow-up: when curio-core wants to serve the `/pdp/*` HTTP API in-process (#13 synapse-sdk compat), the full `curio/pdp` import will be needed and #11 (or similar pattern of sub-package extractions) becomes the real work.
 
 ## Day 7 status: partial
 
