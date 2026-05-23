@@ -176,11 +176,16 @@ func (e *Engine) Start(ctx context.Context) error {
 	// recordMachineRow) and hand-build a *resources.Reg with the resulting
 	// MachineID. Same end-state, just SQL-dialect-aware.
 	//
-	// impls is intentionally nil for the initial wire-up: the engine
-	// boot path exercises the scheduler's machine-registration and
-	// poller goroutines without any real PDP work. Day 7's calibration
-	// miner wires real *pdpv0.* task instances in once the chain-API +
-	// sender plumbing land.
+	// impls is nil for the current wire-up. Even the simplest pdpv0
+	// task (PDPNotifyTask, ctor only takes ctx+db) can't be imported
+	// here without pulling the entire tasks/pdpv0 package into the
+	// compile graph — which transitively imports lotus/storage/sealer,
+	// which requires the !cgo carve-out tracked at curio-core#11.
+	//
+	// Day 7 outcome: scheduler runs against SQLite (verified, polls
+	// every tick clean). pdpv0 task instance wire-up is gated on the
+	// darwin/linux+sealer carve-out from #11. Marking that #11 is now
+	// a Day 7 blocker, not a deferred convenience.
 	reg := &resources.Reg{
 		Resources: resources.Resources{
 			Cpu:       1,

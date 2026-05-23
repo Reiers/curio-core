@@ -15,8 +15,10 @@ package harmonysqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/curiostorage/harmonyquery"
+	"github.com/georgysavva/scany/v2/dbscan"
 )
 
 // Compile-time guards: if these break, the public surface drifted.
@@ -63,13 +65,16 @@ func (s *sqliteTxI) ExecI(sql harmonyquery.RawString, arguments ...any) (int, er
 	return s.tx.Exec(string(sql), arguments...)
 }
 
-func (s *sqliteTxI) SelectI(sliceOfStructPtr any, sql harmonyquery.RawString, arguments ...any) error {
-	// The existing Tx.Select API doesn't exist on harmonysqlite.Tx yet.
-	// Use a query + scan loop directly. For now, return not-implemented;
-	// PDP task code paths that hit Select-in-Tx will surface during the
-	// Day 7 calibration run and we'll port the harmonyquery scany code
-	// then.
-	return errTxSelectNotImplemented
+func (s *sqliteTxI) SelectI(sliceOfStructPtr any, q harmonyquery.RawString, arguments ...any) error {
+	rows, err := s.tx.Query(string(q), arguments...)
+	if err != nil {
+		return fmt.Errorf("harmonysqlite Tx.SelectI: query: %w", err)
+	}
+	defer rows.Close()
+	if err := dbscan.ScanAll(sliceOfStructPtr, rows); err != nil {
+		return fmt.Errorf("harmonysqlite Tx.SelectI: scan: %w", err)
+	}
+	return nil
 }
 
 func (s *sqliteTxI) QueryRowI(sql harmonyquery.RawString, arguments ...any) harmonyquery.Row {
@@ -85,13 +90,4 @@ func (r rowFromSqlRow) Scan(dst ...any) error {
 	return r.r.Scan(dst...)
 }
 
-// errTxSelectNotImplemented marks call paths that Day 7 calibration must
-// exercise. When a real PDP task does tx.Select inside a transaction,
-// we'll see this error and port the scany-based row decoder here.
-type txSelectNotImplementedT struct{}
-
-func (txSelectNotImplementedT) Error() string {
-	return "harmonysqlite: TxInterface.Select not yet ported (Day 7 follow-up)"
-}
-
-var errTxSelectNotImplemented error = txSelectNotImplementedT{}
+// (errTxSelectNotImplemented removed — Tx.SelectI is now real.)
