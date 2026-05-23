@@ -30,7 +30,10 @@ import (
 
 	"github.com/curiostorage/harmonyquery"
 
+	lanterndaemon "github.com/Reiers/lantern/pkg/daemon"
+
 	"github.com/Reiers/curio-core/internal/diskstash"
+	"github.com/Reiers/curio-core/internal/nodeapi"
 )
 
 // Compile-time guard: *diskstash.Store must satisfy paths.StashStore.
@@ -53,23 +56,45 @@ var _ curiopaths.StashStore = (*diskstash.Store)(nil)
 // proof submission) will return 5xx; the upload trio (/pdp/piece/uploads*)
 // works end-to-end and lands data on disk + a row in
 // pdp_piece_streaming_uploads.
-func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface, stashDir string) (*upstreampdp.PDPService, error) {
+// lantern is the embedded Lantern daemon. May be nil for tests or
+// the --no-lantern boot path; routes that need chain reads degrade
+// to 5xx in that mode.
+//
+// When lantern is non-nil and Started, Mount dials it over standard
+// /rpc/v1 with a self-minted admin token and wires the resulting
+// FullNode handle into upstream PDPService as the PDPServiceNodeApi.
+//
+// Returns a closer that releases the JSON-RPC transport; callers
+// should defer it for the lifetime of the daemon.
+func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface, stashDir string, lantern *lanterndaemon.Daemon) (*upstreampdp.PDPService, func(), error) {
 	stash, err := diskstash.New(stashDir)
 	if err != nil {
-		return nil, err
+		return nil, func() {}, err
+	}
+	var (
+		nodeAPI upstreampdp.PDPServiceNodeApi
+		closer  = func() {}
+	)
+	if lantern != nil {
+		c, err := nodeapi.New(ctx, lantern)
+		if err != nil {
+			return nil, func() {}, err
+		}
+		nodeAPI = c.FullNode()
+		closer = c.Close
 	}
 	svc := upstreampdp.NewPDPService(
 		ctx,
 		db,
 		stash,
-		nil, // ethchain.EthClient — TODO: wire to embedded Lantern RPC
-		nil, // PDPServiceNodeApi — TODO: wire to embedded Lantern RPC
-		nil, // *message.SenderETH — TODO: calibration wallet signer
-		nil, // *alertmanager.AlertTask — handlePing nil-checks this
-		nil, // *ipni_provider.Provider — TODO: minimal IPNI publisher
+		nil,     // ethchain.EthClient — TODO: wire to lotus ethclient over same RPC
+		nodeAPI, // PDPServiceNodeApi via embedded Lantern /rpc/v1
+		nil,     // *message.SenderETH — TODO: calibration wallet signer
+		nil,     // *alertmanager.AlertTask — handlePing nil-checks this
+		nil,     // *ipni_provider.Provider — TODO: minimal IPNI publisher
 	)
 	upstreampdp.Routes(r, svc)
-	return svc, nil
+	return svc, closer, nil
 }
 
 // FallbackHandler returns an HTTP handler that serves the chi router

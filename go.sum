@@ -119,6 +119,8 @@ github.com/Reiers/lantern v1.2.2-0.20260522222332-9177a99e6581 h1:U/W2OtjHbw261Z
 github.com/Reiers/lantern v1.2.2-0.20260522222332-9177a99e6581/go.mod h1:EmEQBtIa/0YQY0RmbJhhqmwRelvsHmZ4079hj6WFHrk=
 github.com/Reiers/lantern v1.4.1-0.20260523140040-9f9f5097a0a4 h1:XyrbVO8m05TgBW6UsVuTlb5RokW+q/iMNXx7/MAqsEg=
 github.com/Reiers/lantern v1.4.1-0.20260523140040-9f9f5097a0a4/go.mod h1:EmEQBtIa/0YQY0RmbJhhqmwRelvsHmZ4079hj6WFHrk=
+github.com/Reiers/lantern v1.4.1-0.20260523170605-12207e0bdf70 h1:8trQ4ld5UGJMmJNZ7TJpESlr1Xf+YDvqWZJ9iEqWKJs=
+github.com/Reiers/lantern v1.4.1-0.20260523170605-12207e0bdf70/go.mod h1:EmEQBtIa/0YQY0RmbJhhqmwRelvsHmZ4079hj6WFHrk=
 github.com/Reiers/lotus v0.2.11-0.20260523003030-baf8b697b916 h1:U2r4SVfPwqmm3QJO5l5LCoNA7XnvQ3bks8DQmLMqHnw=
 github.com/Reiers/lotus v0.2.11-0.20260523003030-baf8b697b916/go.mod h1:tzFOxSSszbfgocCRMsAraa9C3Jj3iEIEiOY9Pf9CsmY=
 github.com/Reiers/lotus v0.2.11-0.20260523142958-39c6137c2ea8 h1:8csNjSUUbY6CJ78C4UzGPst7+LnwjwCwbKCYSdRr2gk=

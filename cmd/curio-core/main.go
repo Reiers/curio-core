@@ -274,10 +274,18 @@ Flags:
 			return fmt.Errorf("create wallet: %w", err)
 		}
 		lanternDaemon, err = lantern.New(lantern.Config{
-			DataDir:      *dataDir,
-			Wallet:       w,
-			Gateway:      *gateway,
-			Network:      *network,
+			DataDir: *dataDir,
+			Wallet:  w,
+			Gateway: *gateway,
+			Network: *network,
+			// Ephemeral loopback bind: embedded Lantern speaks /rpc/v1 to
+			// in-process consumers (nodeapi, ethclient) only. We never expose
+			// this port externally; nginx terminates client traffic at the
+			// curio-core listener (14994) which composes /pdp/* over the
+			// upstream PDPService that itself talks to Lantern through this
+			// loopback. Port 0 avoids conflicts with a real standalone
+			// Lantern on the same host.
+			RPCListen:    "127.0.0.1:0",
 			NoLibp2p:     true,
 			EmbeddedMode: true,
 		})
@@ -306,6 +314,9 @@ Flags:
 		}
 		tr := lanternDaemon.TrustedRoot()
 		fmt.Printf("  lantern:  anchored at epoch %d\n", tr.Epoch)
+		if addr := lanternDaemon.RPCAddr(); addr != "" {
+			fmt.Printf("  lantern:  rpc at http://%s/rpc/v1 (in-process)\n", addr)
+		}
 	} else {
 		fmt.Printf("  lantern:  skipped (--no-lantern)\n")
 	}
@@ -316,10 +327,12 @@ Flags:
 	//   /, /setup, /api/setup — curio-core's first-run WebUI flow
 	pdpMux := chi.NewRouter()
 	stashDir := filepath.Join(*dataDir, "stash")
-	if _, err := pdpwire.Mount(rootCtx, pdpMux, eng.DB(), stashDir); err != nil {
+	_, pdpClose, err := pdpwire.Mount(rootCtx, pdpMux, eng.DB(), stashDir, lanternDaemon)
+	if err != nil {
 		_ = eng.Stop()
 		return fmt.Errorf("pdpwire.Mount: %w", err)
 	}
+	defer pdpClose()
 	fmt.Printf("  pdp:      /pdp/* routes mounted (stash %s)\n", stashDir)
 	handler := pdpwire.FallbackHandler(pdpMux, setupweb.New(eng.DB()))
 	srv := &http.Server{
