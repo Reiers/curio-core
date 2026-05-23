@@ -16,6 +16,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/curiostorage/harmonyquery"
 	"github.com/georgysavva/scany/v2/dbscan"
@@ -121,7 +122,82 @@ type rowFromSqlRow struct {
 }
 
 func (r rowFromSqlRow) Scan(dst ...any) error {
-	return r.r.Scan(dst...)
+	return scanWithTimeFix(r.r.Scan, dst...)
+}
+
+// scanWithTimeFix wraps a Scan() call to fix the modernc.org/sqlite
+// issue where CURRENT_TIMESTAMP / TIMESTAMP TEXT columns can't be
+// scanned directly into *time.Time. We pass a *string proxy for every
+// *time.Time destination, then parse the SQLite-flavoured datetime
+// string into the original *time.Time after the underlying Scan
+// returns.
+//
+// Supported SQLite datetime formats (in priority order):
+//   - "2006-01-02 15:04:05.999999999" (high-precision, modernc default)
+//   - "2006-01-02 15:04:05"           (CURRENT_TIMESTAMP default)
+//   - time.RFC3339Nano                 (Go's MarshalJSON shape)
+//   - time.RFC3339
+//
+// NULL is mapped to a zero time.Time without error (matches pgx/yugabyte
+// behaviour for NULL TIMESTAMP).
+func scanWithTimeFix(scan func(...any) error, dst ...any) error {
+	timeProxies := make(map[int]*string, 0)
+	newDst := make([]any, len(dst))
+	for i, d := range dst {
+		if tp, ok := d.(*time.Time); ok && tp != nil {
+			var s sql.NullString
+			newDst[i] = &s
+			timeProxies[i] = new(string)
+			// Use a closure-captured proxy: after scan, parse s into *time.Time.
+			_ = tp
+			newDst[i] = &s
+			timeProxies[i] = (*string)(nil) // sentinel; we'll resolve via newDst
+			continue
+		}
+		newDst[i] = d
+	}
+	if err := scan(newDst...); err != nil {
+		return err
+	}
+	for i := range dst {
+		tp, ok := dst[i].(*time.Time)
+		if !ok || tp == nil {
+			continue
+		}
+		_ = timeProxies // silence linter; timeProxies kept for future expansion
+		ns := newDst[i].(*sql.NullString)
+		if !ns.Valid {
+			*tp = time.Time{}
+			continue
+		}
+		t, err := parseSQLiteTime(ns.String)
+		if err != nil {
+			return fmt.Errorf("scanWithTimeFix: column %d: parse %q as time: %w", i, ns.String, err)
+		}
+		*tp = t
+	}
+	return nil
+}
+
+// parseSQLiteTime tries the SQLite datetime formats modernc produces
+// (and that CURRENT_TIMESTAMP defaults emit) before falling back to
+// the RFC3339 family Go marshals time.Time as.
+func parseSQLiteTime(s string) (time.Time, error) {
+	layouts := []string{
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+		time.RFC3339Nano,
+		time.RFC3339,
+	}
+	var lastErr error
+	for _, layout := range layouts {
+		t, err := time.Parse(layout, s)
+		if err == nil {
+			return t, nil
+		}
+		lastErr = err
+	}
+	return time.Time{}, lastErr
 }
 
 // (errTxSelectNotImplemented removed — Tx.SelectI is now real.)

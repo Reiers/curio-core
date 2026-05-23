@@ -151,12 +151,12 @@ func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface, stashDi
 }
 
 // FallbackHandler returns an HTTP handler that serves the chi router
-// for /pdp/* paths and delegates everything else to inner. Used by
-// cmd/curio-core/main.go to compose the WebUI + PDP routes under one
-// listener.
+// for /pdp/* and /admin/* paths and delegates everything else to inner.
+// Used by cmd/curio-core/main.go to compose the WebUI + PDP routes
+// under one listener.
 func FallbackHandler(pdpMux *chi.Mux, inner http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isPDPPath(r.URL.Path) {
+		if isChiPath(r.URL.Path) {
 			pdpMux.ServeHTTP(w, r)
 			return
 		}
@@ -164,8 +164,11 @@ func FallbackHandler(pdpMux *chi.Mux, inner http.Handler) http.Handler {
 	})
 }
 
-func isPDPPath(p string) bool {
-	const pfx = "/pdp"
+func isChiPath(p string) bool {
+	return hasPathPrefix(p, "/pdp") || hasPathPrefix(p, "/admin")
+}
+
+func hasPathPrefix(p, pfx string) bool {
 	if len(p) < len(pfx) {
 		return false
 	}

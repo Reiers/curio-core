@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/Reiers/lantern v1.4.1-0.20260523175635-9621aa8a2125
+	github.com/Reiers/lantern v1.4.1-0.20260523181630-d3cf1ae4ac32
 	github.com/curiostorage/harmonyquery v1.0.2
 	github.com/ethereum/go-ethereum v1.17.2
 	github.com/filecoin-project/curio v1.28.2-0.20260522154309-2153109777fa
@@ -248,7 +248,7 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/filecoin-project/curio => github.com/Reiers/curio v1.27.3-0.20260523165652-a0e1fc332905
+replace github.com/filecoin-project/curio => github.com/Reiers/curio v1.27.3-0.20260523180859-597859a29144
 
 replace github.com/curiostorage/harmonyquery => github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13
 

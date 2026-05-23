@@ -33,6 +33,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Reiers/curio-core/internal/admin"
 	"github.com/Reiers/curio-core/internal/config"
 	"github.com/Reiers/curio-core/internal/engine"
 	"github.com/Reiers/curio-core/internal/ethkeys"
@@ -40,6 +41,7 @@ import (
 	"github.com/Reiers/curio-core/internal/setupweb"
 
 	"github.com/filecoin-project/curio/harmony/harmonytask"
+	"github.com/filecoin-project/curio/tasks/message"
 )
 
 func main() {
@@ -388,6 +390,17 @@ Flags:
 		return fmt.Errorf("pdpwire.Mount: %w", err)
 	}
 	fmt.Printf("  pdp:      /pdp/* routes mounted (stash %s)\n", stashDir)
+
+	// Mount /admin/* on the same chi router (test-tx, eth-key).
+	// Loopback-only by intent; nginx in front does not forward /admin/*
+	// to the public internet.
+	var adminSender *message.SenderETH
+	if chainDeps != nil {
+		adminSender = chainDeps.SenderETH
+	}
+	admin.Routes(pdpMux, eng.DB(), adminSender)
+	fmt.Printf("  admin:    /admin/test-tx, /admin/eth-key mounted (loopback)\n")
+
 	handler := pdpwire.FallbackHandler(pdpMux, setupweb.New(eng.DB()))
 	srv := &http.Server{
 		Addr:              *listenAddr,

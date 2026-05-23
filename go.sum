@@ -105,6 +105,8 @@ github.com/Reiers/curio v1.27.3-0.20260523164936-f8ab46d7b284 h1:rIC3d3EzTAQXffB
 github.com/Reiers/curio v1.27.3-0.20260523164936-f8ab46d7b284/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
 github.com/Reiers/curio v1.27.3-0.20260523165652-a0e1fc332905 h1:/c5DK+SGCz1sqQf4vZiwaicnHaU1zQk1qnera7KTbFw=
 github.com/Reiers/curio v1.27.3-0.20260523165652-a0e1fc332905/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
+github.com/Reiers/curio v1.27.3-0.20260523180859-597859a29144 h1:TpFX4CV2ksQ8c0e5oyMV5VRydZLqNTT5M7PAGXvQguQ=
+github.com/Reiers/curio v1.27.3-0.20260523180859-597859a29144/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523104557-b8e4241ba49d h1:tVvG3FCDKLHk6XQIb6M28jkt204Gr2z7Xlunsf4jIRA=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523104557-b8e4241ba49d/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523105332-0927b788105d h1:QxGSJjQYRosK2VTfd0+Nvukw3yViWQ/UxNl85F/CZZw=
@@ -127,6 +129,8 @@ github.com/Reiers/lantern v1.4.1-0.20260523175010-8351e4683346 h1:zODiI6dUlnFjSt
 github.com/Reiers/lantern v1.4.1-0.20260523175010-8351e4683346/go.mod h1:EmEQBtIa/0YQY0RmbJhhqmwRelvsHmZ4079hj6WFHrk=
 github.com/Reiers/lantern v1.4.1-0.20260523175635-9621aa8a2125 h1:hPevumfyoZJfmy4ZYxU0TcRugQSnPMRZCyyiGx8siCI=
 github.com/Reiers/lantern v1.4.1-0.20260523175635-9621aa8a2125/go.mod h1:EmEQBtIa/0YQY0RmbJhhqmwRelvsHmZ4079hj6WFHrk=
+github.com/Reiers/lantern v1.4.1-0.20260523181630-d3cf1ae4ac32 h1:RITUXa0+3jeuKLTyDDZRvFbHrEOQ4NcHJ3KyoTV8aP0=
+github.com/Reiers/lantern v1.4.1-0.20260523181630-d3cf1ae4ac32/go.mod h1:EmEQBtIa/0YQY0RmbJhhqmwRelvsHmZ4079hj6WFHrk=
 github.com/Reiers/lotus v0.2.11-0.20260523003030-baf8b697b916 h1:U2r4SVfPwqmm3QJO5l5LCoNA7XnvQ3bks8DQmLMqHnw=
 github.com/Reiers/lotus v0.2.11-0.20260523003030-baf8b697b916/go.mod h1:tzFOxSSszbfgocCRMsAraa9C3Jj3iEIEiOY9Pf9CsmY=
 github.com/Reiers/lotus v0.2.11-0.20260523142958-39c6137c2ea8 h1:8csNjSUUbY6CJ78C4UzGPst7+LnwjwCwbKCYSdRr2gk=
