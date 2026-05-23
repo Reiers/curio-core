@@ -146,13 +146,14 @@ client calls POST /pdp/data-sets/create-and-add
 | Real on-chain tx via embedded Lantern | ✅ shipped (calibration block 3,741,096; viem path) |
 | PDPService → SenderETH harmonytask broadcast | ⏳ blocked on #17 |
 | Auto-generated `eth_keys` wallet | ✅ shipped |
-| VMBridge for FEVM forwarding | ✅ shipped (calibration/mainnet Glif defaults) |
+| VMBridge for FEVM forwarding (12 eth_* methods) | ✅ shipped (calibration/mainnet Glif defaults) |
+| Wallet management CLI (list/new/import/export/role/delete) | ✅ shipped (send deferred behind #17) |
+| Doctor CLI (DB ↔ on-chain reconciliation, observe-only) | ✅ shipped ([#41](https://github.com/Reiers/curio-core/issues/41) closed) |
+| SP Registry CLI (`sp info` + `sp register --dry-run`) | ✅ read + draft live; broadcast deferred behind #17 |
+| PDPVerifier v3.4.0 ABI | ✅ shipped (forward-compatible) |
 | HTTP retrieval (`/piece/{cid}`) | ⏳ [#36](https://github.com/Reiers/curio-core/issues/36) |
 | USDFC payment receiver + rail settlement | ⏳ [#37](https://github.com/Reiers/curio-core/issues/37) |
-| SP Registry registration | ⏳ [#38](https://github.com/Reiers/curio-core/issues/38) |
 | Operator dashboard | ⏳ [#39](https://github.com/Reiers/curio-core/issues/39) |
-| Wallet management CLI/UI | ⏳ [#40](https://github.com/Reiers/curio-core/issues/40) |
-| Doctor (DB ↔ on-chain reconciliation) | ⏳ [#41](https://github.com/Reiers/curio-core/issues/41) |
 | IPNI provider | ⏳ [#42](https://github.com/Reiers/curio-core/issues/42) |
 | Session Key Registry | ⏳ [#44](https://github.com/Reiers/curio-core/issues/44) |
 | synapse-sdk compat test suite | ⏳ [#46](https://github.com/Reiers/curio-core/issues/46) |
@@ -173,6 +174,25 @@ CGO_ENABLED=0 go build -o curio-core ./cmd/curio-core
 
 # run (full daemon)
 ./curio-core run --network calibration --data-dir ~/.curio-core --listen 127.0.0.1:14994
+```
+
+### Operator CLIs (no daemon needed)
+
+```sh
+# Wallet management
+curio-core wallet list
+curio-core wallet new --role backup
+curio-core wallet import --role pdp <0xhex-private-key>
+curio-core wallet export --confirm <0xaddr>
+curio-core wallet role <0xaddr> backup
+curio-core wallet delete --yes <0xaddr>
+
+# Health + reconciliation report (read-only)
+curio-core doctor --network calibration
+
+# SP Registry operations
+curio-core sp info
+curio-core sp register --name "Acme PDP" --description "Hot storage SP" --dry-run
 ```
 
 Boot log:
