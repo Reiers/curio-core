@@ -101,6 +101,16 @@ func (s *sqliteTxI) SendBatch(ctx context.Context, b *pgx.Batch) (pgx.BatchResul
 	return nil, errNotSupportedOnSQLite("SendBatch")
 }
 
+// QueryI is the in-transaction streaming cursor. SQLite doesn't expose
+// harmonyquery's *Query type natively. Returns a not-supported error;
+// callers reach this when they iterate row-by-row inside a tx (e.g.
+// pdp/handlers_add.go's piece-add path under a SQL ANY() filter).
+// Curio Core's PDP-only deployment shape doesn't exercise these paths
+// in the demo flow.
+func (s *sqliteTxI) QueryI(sql harmonyquery.RawString, arguments ...any) (*harmonyquery.Query, error) {
+	return nil, errNotSupportedOnSQLite("TxInterface.QueryI")
+}
+
 func (s *sqliteTxI) QueryRowI(sql harmonyquery.RawString, arguments ...any) harmonyquery.Row {
 	return rowFromSqlRow{r: s.tx.QueryRow(string(sql), arguments...)}
 }

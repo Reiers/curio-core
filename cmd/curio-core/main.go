@@ -31,8 +31,11 @@ import (
 	lantern "github.com/Reiers/lantern/pkg/daemon"
 	"github.com/Reiers/lantern/wallet"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/Reiers/curio-core/internal/config"
 	"github.com/Reiers/curio-core/internal/engine"
+	"github.com/Reiers/curio-core/internal/pdpwire"
 	"github.com/Reiers/curio-core/internal/setupweb"
 )
 
@@ -308,7 +311,12 @@ Flags:
 	}
 
 	// --- HTTP server ---
-	handler := setupweb.New(eng.DB())
+	// curio-core composes two route sets under one listener:
+	//   /pdp/*  — upstream curio/pdp HTTP API (synapse-sdk speaks this)
+	//   /, /setup, /api/setup — curio-core's first-run WebUI flow
+	pdpMux := chi.NewRouter()
+	pdpwire.Mount(rootCtx, pdpMux, eng.DB())
+	handler := pdpwire.FallbackHandler(pdpMux, setupweb.New(eng.DB()))
 	srv := &http.Server{
 		Addr:              *listenAddr,
 		Handler:           handler,

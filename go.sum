@@ -89,6 +89,10 @@ github.com/Reiers/curio v1.27.3-0.20260523143501-c05ade82664a h1:tQZt/O95GCgX+KQ
 github.com/Reiers/curio v1.27.3-0.20260523143501-c05ade82664a/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
 github.com/Reiers/curio v1.27.3-0.20260523143556-e011391edb0e h1:aKVjuCb1uAhPYUAuDZLvjrXDvzfn/PySIPNThpGJtI4=
 github.com/Reiers/curio v1.27.3-0.20260523143556-e011391edb0e/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
+github.com/Reiers/curio v1.27.3-0.20260523144203-1eebb7cdfc40 h1:4PC0wqjb0Etz3ZrC5q+wv2vhwdkSaMFn2nu0WmrdDbc=
+github.com/Reiers/curio v1.27.3-0.20260523144203-1eebb7cdfc40/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
+github.com/Reiers/curio v1.27.3-0.20260523144407-6002a2b06134 h1:Xt+m65p5MDeqpYbNiHvSEMleFvAO9Um8ZfZp4BFOHEI=
+github.com/Reiers/curio v1.27.3-0.20260523144407-6002a2b06134/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523104557-b8e4241ba49d h1:tVvG3FCDKLHk6XQIb6M28jkt204Gr2z7Xlunsf4jIRA=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523104557-b8e4241ba49d/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523105332-0927b788105d h1:QxGSJjQYRosK2VTfd0+Nvukw3yViWQ/UxNl85F/CZZw=
@@ -97,6 +101,8 @@ github.com/Reiers/harmonyquery v1.0.3-0.20260523143130-5b00e9e6e18c h1:Oh1sEGJE1
 github.com/Reiers/harmonyquery v1.0.3-0.20260523143130-5b00e9e6e18c/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523143446-ba6a62c18197 h1:gO4MQjf/qg+UUwpRR56Fk8x/LLQy0p3MWPVwTAC8788=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523143446-ba6a62c18197/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
+github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13 h1:DDNL54LfDcuIQDRR9W8qE2XtQt0Y5oPOI9TVe+u9GoA=
+github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
 github.com/Reiers/lantern v1.2.2-0.20260522222332-9177a99e6581 h1:U/W2OtjHbw261Z3EvM5ydeUJCSWsdxE55y3tdGCdxFM=
 github.com/Reiers/lantern v1.2.2-0.20260522222332-9177a99e6581/go.mod h1:EmEQBtIa/0YQY0RmbJhhqmwRelvsHmZ4079hj6WFHrk=
 github.com/Reiers/lantern v1.4.1-0.20260523140040-9f9f5097a0a4 h1:XyrbVO8m05TgBW6UsVuTlb5RokW+q/iMNXx7/MAqsEg=
