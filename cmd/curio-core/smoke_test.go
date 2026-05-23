@@ -105,6 +105,41 @@ func TestSmoke(t *testing.T) {
 			wantStderrSubs: []string{"address", "listen", "missing port"},
 			timeout:        10 * time.Second,
 		},
+		{
+			name:           "wallet_no_subcommand",
+			args:           []string{"wallet"},
+			wantExitNon0:   true,
+			wantStderrSubs: []string{"subcommand", "Subcommands:"},
+			timeout:        5 * time.Second,
+		},
+		{
+			name:           "wallet_help",
+			args:           []string{"wallet", "help"},
+			wantExitNon0:   false,
+			wantStderrSubs: []string{"wallet management", "Subcommands:"},
+			timeout:        5 * time.Second,
+		},
+		{
+			name:           "wallet_list_missing_db",
+			args:           []string{"wallet", "list", "--data-dir", "/no/such/path"},
+			wantExitNon0:   true,
+			wantStderrSubs: []string{"state.sqlite", "not found"},
+			timeout:        5 * time.Second,
+		},
+		{
+			name:           "wallet_export_no_confirm",
+			args:           []string{"wallet", "export", "0x6b4758baAcE34519F4977A30f6bEcd473249833c"},
+			wantExitNon0:   true,
+			wantStderrSubs: []string{"--confirm", "plaintext"},
+			timeout:        5 * time.Second,
+		},
+		{
+			name:           "wallet_import_no_key",
+			args:           []string{"wallet", "import"},
+			wantExitNon0:   true,
+			wantStderrSubs: []string{"private key", "--key"},
+			timeout:        5 * time.Second,
+		},
 	}
 
 	for _, tc := range tests {
