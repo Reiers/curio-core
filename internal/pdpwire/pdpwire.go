@@ -26,6 +26,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	upstreampdp "github.com/filecoin-project/curio/pdp"
+	"github.com/filecoin-project/curio/lib/ethchain"
 	curiopaths "github.com/filecoin-project/curio/lib/paths"
 
 	"github.com/curiostorage/harmonyquery"
@@ -33,6 +34,7 @@ import (
 	lanterndaemon "github.com/Reiers/lantern/pkg/daemon"
 
 	"github.com/Reiers/curio-core/internal/diskstash"
+	cethclient "github.com/Reiers/curio-core/internal/ethclient"
 	"github.com/Reiers/curio-core/internal/nodeapi"
 )
 
@@ -73,22 +75,43 @@ func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface, stashDi
 	}
 	var (
 		nodeAPI upstreampdp.PDPServiceNodeApi
-		closer  = func() {}
+		ethC    *cethclient.Client
+		closeFns []func()
 	)
 	if lantern != nil {
-		c, err := nodeapi.New(ctx, lantern)
+		nodeC, err := nodeapi.New(ctx, lantern)
 		if err != nil {
 			return nil, func() {}, err
 		}
-		nodeAPI = c.FullNode()
-		closer = c.Close
+		nodeAPI = nodeC.FullNode()
+		closeFns = append(closeFns, nodeC.Close)
+
+		ethC, err = cethclient.New(ctx, lantern)
+		if err != nil {
+			nodeC.Close()
+			return nil, func() {}, err
+		}
+		closeFns = append(closeFns, ethC.Close)
+	}
+	closer := func() {
+		for _, f := range closeFns {
+			f()
+		}
+	}
+
+	// nil-safe handoff: when lantern was nil, ethC is also nil. PDPService
+	// accepts a nil ethchain.EthClient; routes that touch chain reads
+	// return 5xx in that mode (same shape as before today's wiring).
+	var ethArg ethchain.EthClient
+	if ethC != nil {
+		ethArg = ethC
 	}
 	svc := upstreampdp.NewPDPService(
 		ctx,
 		db,
 		stash,
-		nil,     // ethchain.EthClient — TODO: wire to lotus ethclient over same RPC
-		nodeAPI, // PDPServiceNodeApi via embedded Lantern /rpc/v1
+		ethArg,  // ethchain.EthClient via embedded Lantern /rpc/v1 (eth_*)
+		nodeAPI, // PDPServiceNodeApi via embedded Lantern /rpc/v1 (Filecoin.*)
 		nil,     // *message.SenderETH — TODO: calibration wallet signer
 		nil,     // *alertmanager.AlertTask — handlePing nil-checks this
 		nil,     // *ipni_provider.Provider — TODO: minimal IPNI publisher
@@ -96,6 +119,9 @@ func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface, stashDi
 	upstreampdp.Routes(r, svc)
 	return svc, closer, nil
 }
+
+// Compile-time guard: *cethclient.Client satisfies ethchain.EthClient.
+var _ ethchain.EthClient = (*cethclient.Client)(nil)
 
 // FallbackHandler returns an HTTP handler that serves the chi router
 // for /pdp/* paths and delegates everything else to inner. Used by
