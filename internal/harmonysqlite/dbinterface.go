@@ -19,7 +19,16 @@ import (
 
 	"github.com/curiostorage/harmonyquery"
 	"github.com/georgysavva/scany/v2/dbscan"
+	"github.com/yugabyte/pgx/v5"
 )
+
+// errNotSupportedOnSQLite labels methods on harmonyquery.DBInterface /
+// TxInterface that don't have a SQLite equivalent. Callers reaching
+// these paths are exercising pgx-specific behaviour (batching, streaming
+// cursors) that requires a Postgres backend.
+func errNotSupportedOnSQLite(method string) error {
+	return fmt.Errorf("harmonysqlite: %s not supported (pgx-specific; SQLite backend can't satisfy this contract). Curio Core PDP-only deployments don't exercise this code path.", method)
+}
 
 // Compile-time guards: if these break, the public surface drifted.
 var _ harmonyquery.DBInterface = (*DB)(nil)
@@ -49,6 +58,14 @@ func (d *DB) QueryRowI(ctx context.Context, sql harmonyquery.RawString, argument
 // Wraps the existing BeginTransaction(*Tx) call by adapting the closure
 // signature: the interface-typed callback gets a sqliteTxI wrapper around
 // the concrete *Tx.
+// QueryI returns a streaming cursor. SQLite doesn't expose harmonyquery's
+// *Query type natively; we return a not-supported error because the
+// upstream call sites that hit QueryI (ipni-provider's refreshProviders)
+// aren't reached by curio-core's PDP-only deployment shape.
+func (d *DB) QueryI(ctx context.Context, sql harmonyquery.RawString, arguments ...any) (*harmonyquery.Query, error) {
+	return nil, errNotSupportedOnSQLite("QueryI")
+}
+
 func (d *DB) BeginTransactionI(ctx context.Context, fn func(harmonyquery.TxInterface) (commit bool, err error), opt ...harmonyquery.TransactionOption) (bool, error) {
 	return d.BeginTransaction(ctx, func(tx *Tx) (bool, error) {
 		return fn(&sqliteTxI{tx: tx})
@@ -75,6 +92,13 @@ func (s *sqliteTxI) SelectI(sliceOfStructPtr any, q harmonyquery.RawString, argu
 		return fmt.Errorf("harmonysqlite Tx.SelectI: scan: %w", err)
 	}
 	return nil
+}
+
+// SendBatch is pgx-specific batch protocol. Not supported on SQLite.
+// Callers (curio/market/ipni/chunker bulk inserts) aren't reached by
+// curio-core's PDP-only deployment shape.
+func (s *sqliteTxI) SendBatch(ctx context.Context, b *pgx.Batch) (pgx.BatchResults, error) {
+	return nil, errNotSupportedOnSQLite("SendBatch")
 }
 
 func (s *sqliteTxI) QueryRowI(sql harmonyquery.RawString, arguments ...any) harmonyquery.Row {
