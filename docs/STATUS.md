@@ -2,7 +2,11 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-23 11:35 CEST** (after Andy 3-for-3: pdpv0-only scope, drop mk12+market WebUI pages, fold web/ shim cleanup into existing CGo carve-out).
+Last updated: **2026-05-23 12:30 CEST** (after #5 carve-out resolution: linux+no-cgo build GREEN end to end; harmonytask DB-seam refactor is now the SOLE remaining Day 7 blocker).
+
+## Milestone: linux+no-cgo build GREEN (2026-05-23)
+
+`CGO_ENABLED=0 GOOS=linux go build ./...` compiles the full curio-core binary pure-Go end to end. The "sealer + gosigar" wall in Day 6 notes turned out to be a darwin-only artifact: under GOOS=linux, gosigar's sigar_linux.go is pure-Go, and storage/sealer isn't reached by the pdpv0 import closure. The only missing piece was a !cgo split on `curio/harmony/resources/getGPU.go` (Reiers/curio@2233ce6, 10 LoC). Darwin carve-out is now a separate p3 issue (#11).
 
 ## Scope (2026-05-23, Andy via Nicklas)
 
