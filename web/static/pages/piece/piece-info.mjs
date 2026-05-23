@@ -131,7 +131,7 @@ customElements.define('piece-info', class PieceInfoElement extends LitElement {
                         <td>
                             ${item.mk20
                                     ? html`<a href="/pages/mk20-deal/?id=${item.id}">${item.id}</a>`
-                                    : html`<a href="/pages/mk12-deal/?id=${item.id}">${item.id}</a>`}
+                                    : html`${item.id}`}
                         </td>
                         <td>${item.boost_deal ? 'Boost' : (item.legacy_deal ? 'Legacy' : 'DDO')}</td>
                         <td>${item.miner}</td>
@@ -157,7 +157,7 @@ customElements.define('piece-info', class PieceInfoElement extends LitElement {
                     <table class="table table-dark table-striped table-sm">
                         <tr><th colspan="2"><h5>Top Level Info 📋</h5></th></tr>
                         <tr><td>Created At</td><td>${formatDate(entry.deal.created_at)}</td></tr>
-                        <tr><td>UUID</td><td><a href="/pages/mk12-deal/?id=${entry.deal.uuid}">${entry.deal.uuid}</a></td></tr>
+                        <tr><td>UUID</td><td>${entry.deal.uuid}</td></tr>
                         <tr><td>Provider (sp_id)</td><td>${entry.deal.addr}</td></tr>
                         <tr><td>Signed Proposal CID</td><td>${entry.deal.signed_proposal_cid}</td></tr>
                         <tr><td>Is DDO</td><td>${entry.deal.is_ddo}</td></tr>
@@ -216,7 +216,7 @@ customElements.define('piece-info', class PieceInfoElement extends LitElement {
                                         <tbody>
                                             ${matchingPieceDeals.map((item) => html`
                                                 <tr>
-                                                    <td><a href="/pages/mk12-deal/?id=${item.id}">${item.id}</a></td>
+                                                    <td>${item.id}</td>
                                                     <td>${item.boost_deal ? 'Boost' : (item.legacy_deal ? 'Legacy' : 'DDO')}</td>
                                                     <td>${item.miner}</td>
                                                     <td>${item.chain_deal_id}</td>

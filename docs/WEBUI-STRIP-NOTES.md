@@ -60,17 +60,18 @@ Top-level dashboard widgets (`web/static/*.mjs`):
 - `network-summary.mjs`
 - `storage-gc.mjs`
 - `storage-use.mjs`
-- `win-stats.mjs` *(see "Ambiguous / punted" below)*
+
 
 Pages (`web/static/pages/`):
 
 - `actor`, `alerts`, `config`, `ipfs-content`, `ipni`, `mk20`, `mk20-deal`,
   `node_info`, `pdp`, `piece`, `storage_path`, `storage_paths`, `task`,
   `upload-status` — all on Andy's keep list.
-- `market`, `mk12-deal`, `mk12-deals` — explicitly "still under review with
-  Andy, leave in place".
-- `proofshare` — not on the explicit delete list but conceptually porep. See
-  "Ambiguous / punted" below.
+- `market`, `mk12-deal`, `mk12-deals`, `proofshare` — **DROPPED 2026-05-23**
+  (Andy via Nicklas): pdpv0-only scope makes mk12 + storage-market
+  WebUI panels irrelevant; proofshare was porep-flavored.
+  `web/static/win-stats.mjs` (WinningPoSt-flavored, sealing-era) dropped
+  in the same pass.
 
 ## index.html
 
@@ -161,27 +162,27 @@ All back kept pages or shared infrastructure (chain access, harmonytask, etc.).
   re-add hint if a kept page ever needs sector-level APIs.
 - `web/api/webrpc/deals.go` — `TODO(curio-core)` on `DealsSealNow`.
 
+## Resolved 2026-05-23 (Andy via Nicklas)
+
+- `web/static/win-stats.mjs` + `<win-stats>` widget: **DROPPED**.
+- `web/static/pages/proofshare/`: **DROPPED**.
+- `web/static/pages/market/`, `pages/mk12-deal/`, `pages/mk12-deals/`:
+  **DROPPED** (pdpv0-only scope).
+- Nav entries for Storage Market + MK12 removed from `ux/curio-ux.mjs`.
+- mk12-deal hyperlinks in `pages/piece/piece-info.mjs` rewritten to plain
+  text (the `Related MK12 Deals` block only renders when `DealData.mk12`
+  is non-empty, which pdpv0 doesn't populate).
+
+Follow-up: `webrpc/win_stats.go` backend can stay until the next CGo carve-out
+pass; nothing in the WebUI references it now.
+
 ## Ambiguous / punted (NOT decided in this pass)
 
 These are NOT on Andy's explicit delete list, NOT on his explicit keep list,
 and are arguably sealing-era. Left in place to avoid over-stripping. Flag for
 follow-up with Andy:
 
-1. **`web/static/win-stats.mjs` + `<win-stats>` widget on the dashboard**
-   ("Recent Wins"). This is WinningPoSt activity — sealing-era proving. The
-   matching backend file `webrpc/win_stats.go` was kept. If Andy wants the
-   PDP-only dashboard cleaner, drop both `win-stats.mjs` and `win_stats.go`
-   plus the `<win-stats>` element in `index.html`.
-
-2. **`web/static/pages/proofshare/`** (Snark Market). The page directory was
-   NOT on the delete list, but the backend RPC (`webrpc/proofshare.go`) was
-   porep-only and dragged in `curio/lib/proofsvc/common` which fails under
-   pure-Go. The backend was dropped; the static pages will now return JSON-RPC
-   errors when they try to call `ProofshareXxx` methods. Either drop the
-   `pages/proofshare/` dir too, or re-add the backend if Andy wants Snark
-   Market kept. Was already removed from the nav.
-
-3. **`web/api/webrpc/balance_manager.go`** — backs a balance-manager UI that
+1. **`web/api/webrpc/balance_manager.go`** — backs a balance-manager UI that
    may or may not be sealing-coupled. Kept it (no obvious sealing import,
    imports clean under `//go:build cgo` gated package).
 
