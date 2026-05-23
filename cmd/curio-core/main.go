@@ -35,8 +35,11 @@ import (
 
 	"github.com/Reiers/curio-core/internal/config"
 	"github.com/Reiers/curio-core/internal/engine"
+	"github.com/Reiers/curio-core/internal/ethkeys"
 	"github.com/Reiers/curio-core/internal/pdpwire"
 	"github.com/Reiers/curio-core/internal/setupweb"
+
+	"github.com/filecoin-project/curio/harmony/harmonytask"
 )
 
 func main() {
@@ -207,6 +210,9 @@ func cmdRun(args []string) error {
 	listenAddr := fs.String("listen", "127.0.0.1:4711", "HTTP listen address for the WebUI / /setup flow")
 	noLantern := fs.Bool("no-lantern", false, "Skip the embedded Lantern daemon (engine + WebUI only; useful for first-run setup on a host without gateway access yet)")
 	lanternTimeout := fs.Duration("lantern-anchor-timeout", 30*time.Second, "Time to wait for Lantern to reach Started state during boot")
+	vmBridgeRPC := fs.String("vm-bridge-rpc", "", "Upstream Forest/Lotus JSON-RPC URL for FEVM forwarding (eth_call/eth_estimateGas/sendRawTransaction). Defaults per --network: calibration -> https://api.calibration.node.glif.io/rpc/v1, mainnet -> https://api.node.glif.io/rpc/v1. Pass an empty string with --vm-bridge-rpc-disable to disable.")
+	vmBridgeToken := fs.String("vm-bridge-token", "", "Optional Bearer token for the VM bridge upstream (defaults to env LANTERN_VM_BRIDGE_TOKEN)")
+	vmBridgeDisable := fs.Bool("vm-bridge-rpc-disable", false, "Disable VM bridge entirely (eth_call et al. will return 'FEVM method requires --vm-bridge-rpc'). Use only when curio-core is being driven by a flow that doesn't read contract state.")
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `Usage: curio-core run [flags]
 
@@ -247,11 +253,9 @@ Flags:
 	if err != nil {
 		return fmt.Errorf("engine.New: %w", err)
 	}
-	if err := eng.Start(rootCtx); err != nil {
-		_ = eng.Stop()
-		return fmt.Errorf("engine.Start: %w", err)
-	}
-	fmt.Printf("  engine:   %d task types registered\n", eng.Registry().Len())
+	// Note: engine.Start is deferred until after Lantern boot + chain-deps
+	// build + eth_keys bootstrap, so the SendTaskETH can be registered with
+	// harmonytask up-front. See the Lantern + ChainDeps blocks below.
 
 	// --- First-run probe ---
 	st, err := config.Status(rootCtx, eng.DB())
@@ -273,6 +277,24 @@ Flags:
 			_ = eng.Stop()
 			return fmt.Errorf("create wallet: %w", err)
 		}
+		// VM bridge default: pick a calibration / mainnet Glif endpoint per
+		// --network. Operators can override with --vm-bridge-rpc or disable
+		// with --vm-bridge-rpc-disable. This is the one architectural
+		// compromise in the embedded-Lantern story: until Lantern can
+		// execute FEVM reads from its own state tree (lantern#3 area),
+		// curio-core forwards eth_call / eth_estimateGas to a public RPC.
+		bridgeURL := *vmBridgeRPC
+		if !*vmBridgeDisable && bridgeURL == "" {
+			switch *network {
+			case "calibration":
+				bridgeURL = "https://api.calibration.node.glif.io/rpc/v1"
+			case "mainnet":
+				bridgeURL = "https://api.node.glif.io/rpc/v1"
+			}
+		}
+		if *vmBridgeDisable {
+			bridgeURL = ""
+		}
 		lanternDaemon, err = lantern.New(lantern.Config{
 			DataDir: *dataDir,
 			Wallet:  w,
@@ -285,9 +307,11 @@ Flags:
 			// upstream PDPService that itself talks to Lantern through this
 			// loopback. Port 0 avoids conflicts with a real standalone
 			// Lantern on the same host.
-			RPCListen:    "127.0.0.1:0",
-			NoLibp2p:     true,
-			EmbeddedMode: true,
+			RPCListen:     "127.0.0.1:0",
+			NoLibp2p:      true,
+			EmbeddedMode:  true,
+			VMBridgeRPC:   bridgeURL,
+			VMBridgeToken: *vmBridgeToken,
 		})
 		if err != nil {
 			_ = eng.Stop()
@@ -317,9 +341,41 @@ Flags:
 		if addr := lanternDaemon.RPCAddr(); addr != "" {
 			fmt.Printf("  lantern:  rpc at http://%s/rpc/v1 (in-process)\n", addr)
 		}
+		if bridgeURL != "" {
+			fmt.Printf("  lantern:  vm-bridge -> %s\n", bridgeURL)
+		}
 	} else {
 		fmt.Printf("  lantern:  skipped (--no-lantern)\n")
 	}
+
+	// --- Chain deps: ethclient + nodeapi + SenderETH ---
+	chainDeps, err := pdpwire.BuildChainDeps(rootCtx, eng.DB(), lanternDaemon)
+	if err != nil {
+		_ = eng.Stop()
+		return fmt.Errorf("pdpwire.BuildChainDeps: %w", err)
+	}
+	if chainDeps != nil {
+		defer chainDeps.Close()
+	}
+
+	// --- eth_keys bootstrap: ensure a 'pdp' role key exists ---
+	if ethAddr, err := ethkeys.Bootstrap(rootCtx, eng.DB()); err != nil {
+		_ = eng.Stop()
+		return fmt.Errorf("ethkeys.Bootstrap: %w", err)
+	} else {
+		fmt.Printf("  eth_keys: %s (role=pdp)\n", ethAddr)
+	}
+
+	// --- Engine start: register pdpv0 + SendTaskETH ---
+	var extraTasks []harmonytask.TaskInterface
+	if chainDeps != nil && chainDeps.SendTaskETH != nil {
+		extraTasks = append(extraTasks, chainDeps.SendTaskETH)
+	}
+	if err := eng.Start(rootCtx, extraTasks...); err != nil {
+		_ = eng.Stop()
+		return fmt.Errorf("engine.Start: %w", err)
+	}
+	fmt.Printf("  engine:   %d task types registered\n", eng.Registry().Len())
 
 	// --- HTTP server ---
 	// curio-core composes two route sets under one listener:
@@ -327,12 +383,10 @@ Flags:
 	//   /, /setup, /api/setup — curio-core's first-run WebUI flow
 	pdpMux := chi.NewRouter()
 	stashDir := filepath.Join(*dataDir, "stash")
-	_, pdpClose, err := pdpwire.Mount(rootCtx, pdpMux, eng.DB(), stashDir, lanternDaemon)
-	if err != nil {
+	if _, err := pdpwire.Mount(rootCtx, pdpMux, eng.DB(), stashDir, chainDeps); err != nil {
 		_ = eng.Stop()
 		return fmt.Errorf("pdpwire.Mount: %w", err)
 	}
-	defer pdpClose()
 	fmt.Printf("  pdp:      /pdp/* routes mounted (stash %s)\n", stashDir)
 	handler := pdpwire.FallbackHandler(pdpMux, setupweb.New(eng.DB()))
 	srv := &http.Server{

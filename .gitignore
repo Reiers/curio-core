@@ -17,3 +17,4 @@
 # We intentionally don't track or apply these; the canonical SQLite
 # schema lives in internal/harmonysqlite/schema-curio-core/.
 internal/harmonysqlite/migrations/
+*.bin

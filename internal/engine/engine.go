@@ -154,8 +154,13 @@ func (e *Engine) Registry() *TaskRegistry { return e.registry }
 // here; that wire-up unblocks once the fork's harmonydb.DB lands as
 // an interface (see DAY-5-NOTES.md §"Fork follow-ups").
 //
+// extraTasks is an optional list of additional harmonytask.TaskInterface
+// instances to register alongside the built-in pdpv0 set. Used by
+// cmd/curio-core/main to thread message.SendTaskETH (built from the
+// embedded Lantern ethclient) into the scheduler at boot.
+//
 // Returns an error if Start has already been called.
-func (e *Engine) Start(ctx context.Context) error {
+func (e *Engine) Start(ctx context.Context, extraTasks ...harmonytask.TaskInterface) error {
 	if !e.running.CompareAndSwap(false, true) {
 		return errors.New("engine: already started")
 	}
@@ -189,6 +194,7 @@ func (e *Engine) Start(ctx context.Context) error {
 	// wire in as their chain-API/sender/indexstore deps come online.
 	notify := pdpv0.NewPDPNotifyTask(ctx, e.db)
 	impls := []harmonytask.TaskInterface{notify}
+	impls = append(impls, extraTasks...)
 
 	reg := &resources.Reg{
 		Resources: resources.Resources{

@@ -6,17 +6,17 @@
 //	db, paths.StashStore, ethchain.EthClient, PDPServiceNodeApi,
 //	*message.SenderETH, *alertmanager.AlertTask, *ipni_provider.Provider
 //
-// Curio Core's PDP-only deployment shape is much smaller. For the
-// initial demo (Sat 2026-05-23, real PDP cycle: Mac client → Hetzner
-// curio-core provider), this constructor passes nil for the heavy
-// optional fields and a real db. Each nil field means certain routes
-// will return runtime errors when hit; that's acceptable while we
-// incrementally wire the rest. The /pdp/ping route works today because
-// it only references p.Auth and (nilable) p.alertTask.
+// Curio Core's PDP-only deployment shape is much smaller. The
+// pdpwire constructor passes nil for what's not yet wired and real
+// implementations of everything else. Each nil field means certain
+// routes return runtime errors when hit; the upload trio works
+// end-to-end today.
 //
-// As more of the demo lights up, this file grows to pass real
-// implementations of each subsystem. The interface boundary stays
-// stable; what changes is the constructor body.
+// The chain-side deps (ethclient + nodeapi + senderEth) are built
+// in BuildChainDeps so they can be registered with the harmonytask
+// engine BEFORE Start (which takes the impls list up-front). main.go
+// is responsible for the ordering: BuildChainDeps -> engine.Start
+// (passing deps.SendTaskETH as extra task) -> Mount (binding routes).
 package pdpwire
 
 import (
@@ -28,6 +28,7 @@ import (
 	upstreampdp "github.com/filecoin-project/curio/pdp"
 	"github.com/filecoin-project/curio/lib/ethchain"
 	curiopaths "github.com/filecoin-project/curio/lib/paths"
+	"github.com/filecoin-project/curio/tasks/message"
 
 	"github.com/curiostorage/harmonyquery"
 
@@ -38,90 +39,116 @@ import (
 	"github.com/Reiers/curio-core/internal/nodeapi"
 )
 
-// Compile-time guard: *diskstash.Store must satisfy paths.StashStore.
-var _ curiopaths.StashStore = (*diskstash.Store)(nil)
+// Compile-time guards.
+var (
+	_ curiopaths.StashStore = (*diskstash.Store)(nil)
+	_ ethchain.EthClient    = (*cethclient.Client)(nil)
+)
 
-// Mount constructs a PDPService and mounts its routes onto router r.
-//
-// stashDir is the local-disk path where /pdp/piece/upload* streams
-// piece bytes before SQLite registration. Created with 0o700 if not
-// present.
-//
-// The PDPService is constructed with the minimum deps to drive the
-// upload-side flow:
-//   - db: SQLite (via harmonyquery interface)
-//   - storage: local-disk *diskstash.Store implementing paths.StashStore
-//
-// Heavy chain-side deps (ethchain.EthClient, PDPServiceNodeApi,
-// *message.SenderETH, *ipni_provider.Provider) remain nil for now.
-// Routes that nil-deref them (data-set creation, addPiece on-chain,
-// proof submission) will return 5xx; the upload trio (/pdp/piece/uploads*)
-// works end-to-end and lands data on disk + a row in
-// pdp_piece_streaming_uploads.
-// lantern is the embedded Lantern daemon. May be nil for tests or
-// the --no-lantern boot path; routes that need chain reads degrade
-// to 5xx in that mode.
-//
-// When lantern is non-nil and Started, Mount dials it over standard
-// /rpc/v1 with a self-minted admin token and wires the resulting
-// FullNode handle into upstream PDPService as the PDPServiceNodeApi.
-//
-// Returns a closer that releases the JSON-RPC transport; callers
-// should defer it for the lifetime of the daemon.
-func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface, stashDir string, lantern *lanterndaemon.Daemon) (*upstreampdp.PDPService, func(), error) {
-	stash, err := diskstash.New(stashDir)
-	if err != nil {
-		return nil, func() {}, err
-	}
-	var (
-		nodeAPI upstreampdp.PDPServiceNodeApi
-		ethC    *cethclient.Client
-		closeFns []func()
-	)
-	if lantern != nil {
-		nodeC, err := nodeapi.New(ctx, lantern)
-		if err != nil {
-			return nil, func() {}, err
-		}
-		nodeAPI = nodeC.FullNode()
-		closeFns = append(closeFns, nodeC.Close)
+// ChainDeps is the set of chain-side dependencies pdpwire needs to
+// wire into PDPService. Built before engine.Start so the SendTaskETH
+// can be registered with harmonytask up-front.
+type ChainDeps struct {
+	// NodeAPI is the embedded-Lantern-backed Filecoin RPC client.
+	// Implements upstream PDPServiceNodeApi (single ChainHead method
+	// today; lotus FullNode handle so it grows transparently).
+	NodeAPI upstreampdp.PDPServiceNodeApi
 
-		ethC, err = cethclient.New(ctx, lantern)
-		if err != nil {
-			nodeC.Close()
-			return nil, func() {}, err
-		}
-		closeFns = append(closeFns, ethC.Close)
+	// EthClient is the embedded-Lantern-backed go-ethereum client.
+	// Implements upstream ethchain.EthClient end-to-end.
+	EthClient ethchain.EthClient
+
+	// SenderETH signs + broadcasts FEVM transactions with the eth_keys
+	// SQLite-stored private key. PDPService uses this for on-chain
+	// writes (data-set creation, addPiece, proof submission).
+	SenderETH *message.SenderETH
+
+	// SendTaskETH is the harmonytask the engine must register. It
+	// drives the SenderETH's send queue.
+	SendTaskETH *message.SendTaskETH
+
+	// Close releases all transport state. Caller defers this for the
+	// process lifetime.
+	Close func()
+}
+
+// BuildChainDeps dials the embedded Lantern daemon over standard
+// /rpc/v1 with a self-minted admin token, constructs the lotus
+// FullNode client (for Filecoin.*) and the go-ethereum client (for
+// eth_*), and builds a *message.SenderETH bound to the same db the
+// engine uses.
+//
+// Returns nil ChainDeps + nil error when lantern is nil. The caller
+// is expected to check d != nil before threading SendTaskETH into the
+// engine.
+func BuildChainDeps(ctx context.Context, db harmonyquery.DBInterface, lantern *lanterndaemon.Daemon) (*ChainDeps, error) {
+	if lantern == nil {
+		return nil, nil
 	}
+
+	var closeFns []func()
 	closer := func() {
 		for _, f := range closeFns {
 			f()
 		}
 	}
 
-	// nil-safe handoff: when lantern was nil, ethC is also nil. PDPService
-	// accepts a nil ethchain.EthClient; routes that touch chain reads
-	// return 5xx in that mode (same shape as before today's wiring).
-	var ethArg ethchain.EthClient
-	if ethC != nil {
-		ethArg = ethC
+	nodeC, err := nodeapi.New(ctx, lantern)
+	if err != nil {
+		return nil, err
 	}
+	closeFns = append(closeFns, nodeC.Close)
+
+	ethC, err := cethclient.New(ctx, lantern)
+	if err != nil {
+		closer()
+		return nil, err
+	}
+	closeFns = append(closeFns, ethC.Close)
+
+	senderEth, sendTask := message.NewSenderETH(ethC, db)
+
+	return &ChainDeps{
+		NodeAPI:     nodeC.FullNode(),
+		EthClient:   ethC,
+		SenderETH:   senderEth,
+		SendTaskETH: sendTask,
+		Close:       closer,
+	}, nil
+}
+
+// Mount builds the PDPService and mounts its routes onto r. Pass deps
+// from BuildChainDeps (nil-safe).
+func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface, stashDir string, deps *ChainDeps) (*upstreampdp.PDPService, error) {
+	stash, err := diskstash.New(stashDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		nodeAPI   upstreampdp.PDPServiceNodeApi
+		ethArg    ethchain.EthClient
+		senderEth *message.SenderETH
+	)
+	if deps != nil {
+		nodeAPI = deps.NodeAPI
+		ethArg = deps.EthClient
+		senderEth = deps.SenderETH
+	}
+
 	svc := upstreampdp.NewPDPService(
 		ctx,
 		db,
 		stash,
-		ethArg,  // ethchain.EthClient via embedded Lantern /rpc/v1 (eth_*)
-		nodeAPI, // PDPServiceNodeApi via embedded Lantern /rpc/v1 (Filecoin.*)
-		nil,     // *message.SenderETH — TODO: calibration wallet signer
-		nil,     // *alertmanager.AlertTask — handlePing nil-checks this
-		nil,     // *ipni_provider.Provider — TODO: minimal IPNI publisher
+		ethArg,    // ethchain.EthClient via embedded Lantern /rpc/v1
+		nodeAPI,   // PDPServiceNodeApi via embedded Lantern /rpc/v1
+		senderEth, // *message.SenderETH — calibration wallet signer
+		nil,       // *alertmanager.AlertTask — handlePing nil-checks this
+		nil,       // *ipni_provider.Provider — TODO: minimal IPNI publisher
 	)
 	upstreampdp.Routes(r, svc)
-	return svc, closer, nil
+	return svc, nil
 }
-
-// Compile-time guard: *cethclient.Client satisfies ethchain.EthClient.
-var _ ethchain.EthClient = (*cethclient.Client)(nil)
 
 // FallbackHandler returns an HTTP handler that serves the chi router
 // for /pdp/* paths and delegates everything else to inner. Used by
