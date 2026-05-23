@@ -93,6 +93,12 @@ github.com/Reiers/curio v1.27.3-0.20260523144203-1eebb7cdfc40 h1:4PC0wqjb0Etz3Zr
 github.com/Reiers/curio v1.27.3-0.20260523144203-1eebb7cdfc40/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
 github.com/Reiers/curio v1.27.3-0.20260523144407-6002a2b06134 h1:Xt+m65p5MDeqpYbNiHvSEMleFvAO9Um8ZfZp4BFOHEI=
 github.com/Reiers/curio v1.27.3-0.20260523144407-6002a2b06134/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
+github.com/Reiers/curio v1.27.3-0.20260523150233-3d04351505d2 h1:wAO/EV78p5aWMcdbNMyI3xPmg+VH8NjXQ+nWySwh9X4=
+github.com/Reiers/curio v1.27.3-0.20260523150233-3d04351505d2/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
+github.com/Reiers/curio v1.27.3-0.20260523151146-763f67e4cb30 h1:4/MII/LtFNPj7fQgkLvVHS9gb4M5ZdSwTRp3eFCujIE=
+github.com/Reiers/curio v1.27.3-0.20260523151146-763f67e4cb30/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
+github.com/Reiers/curio v1.27.3-0.20260523151552-af34fb4f06f7 h1:L9jUWn8RnFKtC7YjGnjWxeSSm2MbVX8IxQWkEjCOFJY=
+github.com/Reiers/curio v1.27.3-0.20260523151552-af34fb4f06f7/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523104557-b8e4241ba49d h1:tVvG3FCDKLHk6XQIb6M28jkt204Gr2z7Xlunsf4jIRA=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523104557-b8e4241ba49d/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523105332-0927b788105d h1:QxGSJjQYRosK2VTfd0+Nvukw3yViWQ/UxNl85F/CZZw=

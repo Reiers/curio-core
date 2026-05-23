@@ -26,25 +26,42 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	upstreampdp "github.com/filecoin-project/curio/pdp"
+	curiopaths "github.com/filecoin-project/curio/lib/paths"
 
 	"github.com/curiostorage/harmonyquery"
+
+	"github.com/Reiers/curio-core/internal/diskstash"
 )
+
+// Compile-time guard: *diskstash.Store must satisfy paths.StashStore.
+var _ curiopaths.StashStore = (*diskstash.Store)(nil)
 
 // Mount constructs a PDPService and mounts its routes onto router r.
 //
-// The PDPService is constructed with minimal dependencies. Routes that
-// require nil dependencies will return 5xx errors at runtime; routes
-// that don't (notably /pdp/ping) work end-to-end.
+// stashDir is the local-disk path where /pdp/piece/upload* streams
+// piece bytes before SQLite registration. Created with 0o700 if not
+// present.
 //
-// This is the first cut. Subsequent commits expand the deps as they
-// come online (paths.StashStore via a curio-core-side stash, EthClient
-// pointing at embedded Lantern's RPC, message.SenderETH wrapping a
-// calibration wallet, etc.).
-func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface) *upstreampdp.PDPService {
+// The PDPService is constructed with the minimum deps to drive the
+// upload-side flow:
+//   - db: SQLite (via harmonyquery interface)
+//   - storage: local-disk *diskstash.Store implementing paths.StashStore
+//
+// Heavy chain-side deps (ethchain.EthClient, PDPServiceNodeApi,
+// *message.SenderETH, *ipni_provider.Provider) remain nil for now.
+// Routes that nil-deref them (data-set creation, addPiece on-chain,
+// proof submission) will return 5xx; the upload trio (/pdp/piece/uploads*)
+// works end-to-end and lands data on disk + a row in
+// pdp_piece_streaming_uploads.
+func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface, stashDir string) (*upstreampdp.PDPService, error) {
+	stash, err := diskstash.New(stashDir)
+	if err != nil {
+		return nil, err
+	}
 	svc := upstreampdp.NewPDPService(
 		ctx,
 		db,
-		nil, // paths.StashStore — TODO: curio-core-side stash
+		stash,
 		nil, // ethchain.EthClient — TODO: wire to embedded Lantern RPC
 		nil, // PDPServiceNodeApi — TODO: wire to embedded Lantern RPC
 		nil, // *message.SenderETH — TODO: calibration wallet signer
@@ -52,7 +69,7 @@ func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface) *upstre
 		nil, // *ipni_provider.Provider — TODO: minimal IPNI publisher
 	)
 	upstreampdp.Routes(r, svc)
-	return svc
+	return svc, nil
 }
 
 // FallbackHandler returns an HTTP handler that serves the chi router

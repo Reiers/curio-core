@@ -315,7 +315,12 @@ Flags:
 	//   /pdp/*  — upstream curio/pdp HTTP API (synapse-sdk speaks this)
 	//   /, /setup, /api/setup — curio-core's first-run WebUI flow
 	pdpMux := chi.NewRouter()
-	pdpwire.Mount(rootCtx, pdpMux, eng.DB())
+	stashDir := filepath.Join(*dataDir, "stash")
+	if _, err := pdpwire.Mount(rootCtx, pdpMux, eng.DB(), stashDir); err != nil {
+		_ = eng.Stop()
+		return fmt.Errorf("pdpwire.Mount: %w", err)
+	}
+	fmt.Printf("  pdp:      /pdp/* routes mounted (stash %s)\n", stashDir)
 	handler := pdpwire.FallbackHandler(pdpMux, setupweb.New(eng.DB()))
 	srv := &http.Server{
 		Addr:              *listenAddr,

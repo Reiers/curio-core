@@ -91,14 +91,22 @@ CREATE TABLE IF NOT EXISTS pdp_data_set_piece_adds (
 );
 
 -- 20250930-pdp-v0-streaming-upload.sql
+-- Schema parity with upstream Curio's PostgreSQL version. The
+-- streaming-upload handler writes piece_size, raw_size, complete,
+-- completed_at during finalize; earlier curio-core port was missing
+-- those columns and the UPDATE returned 'no such column: piece_size'.
 CREATE TABLE IF NOT EXISTS pdp_piece_streaming_uploads (
-    id       TEXT PRIMARY KEY NOT NULL,
-    service  TEXT NOT NULL,
-    piece_cid TEXT,
-    notify_url TEXT,
-    piece_ref INTEGER,
-    expires_at TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id           TEXT PRIMARY KEY NOT NULL,       -- UUID
+    service      TEXT NOT NULL,                    -- pdp_services.id (or "public" under NullAuth)
+    piece_cid    TEXT,                             -- piece cid v1
+    piece_size   INTEGER,                          -- BIGINT in upstream; padded piece size
+    raw_size     INTEGER,                          -- BIGINT in upstream; original unpadded size
+    piece_ref    INTEGER,                          -- parked_piece_refs.ref_id
+    notify_url   TEXT,
+    expires_at   TEXT,
+    created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    complete     INTEGER,                          -- bool in upstream; 0/1 here
+    completed_at TEXT                              -- TIMESTAMPTZ in upstream
 );
 
 -- 20251027-pdp-v0-filecoin-pay.sql
