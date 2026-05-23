@@ -89,6 +89,8 @@ github.com/Reiers/harmonyquery v1.0.3-0.20260523105332-0927b788105d h1:QxGSJjQYR
 github.com/Reiers/harmonyquery v1.0.3-0.20260523105332-0927b788105d/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
 github.com/Reiers/lantern v1.2.2-0.20260522222332-9177a99e6581 h1:U/W2OtjHbw261Z3EvM5ydeUJCSWsdxE55y3tdGCdxFM=
 github.com/Reiers/lantern v1.2.2-0.20260522222332-9177a99e6581/go.mod h1:EmEQBtIa/0YQY0RmbJhhqmwRelvsHmZ4079hj6WFHrk=
+github.com/Reiers/lantern v1.4.1-0.20260523140040-9f9f5097a0a4 h1:XyrbVO8m05TgBW6UsVuTlb5RokW+q/iMNXx7/MAqsEg=
+github.com/Reiers/lantern v1.4.1-0.20260523140040-9f9f5097a0a4/go.mod h1:EmEQBtIa/0YQY0RmbJhhqmwRelvsHmZ4079hj6WFHrk=
 github.com/Reiers/lotus v0.2.11-0.20260523003030-baf8b697b916 h1:U2r4SVfPwqmm3QJO5l5LCoNA7XnvQ3bks8DQmLMqHnw=
 github.com/Reiers/lotus v0.2.11-0.20260523003030-baf8b697b916/go.mod h1:tzFOxSSszbfgocCRMsAraa9C3Jj3iEIEiOY9Pf9CsmY=
 github.com/Stebalien/go-bitfield v0.0.1/go.mod h1:GNjFpasyUVkHMsfEOk8EFLJ9syQ6SI+XWrX9Wf2XH0s=

@@ -27,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	lanternbuild "github.com/Reiers/lantern/build"
 	lantern "github.com/Reiers/lantern/pkg/daemon"
 	"github.com/Reiers/lantern/wallet"
 
@@ -88,9 +89,14 @@ Run 'curio-core run --help' for the long-running daemon's flags.
 func cmdProbe(args []string) error {
 	fs := flag.NewFlagSet("probe", flag.ExitOnError)
 	dataDir := fs.String("data-dir", defaultDataDir(), "Local data directory (wallet + headerstore live here)")
-	gateway := fs.String("gateway", "https://gateway.lantern.reiers.io", "Lantern gateway URL")
+	network := fs.String("network", string(lanternbuild.DefaultNetwork), "Filecoin network: mainnet | calibration")
+	gateway := fs.String("gateway", "", "Lantern gateway URL (default chosen per --network; see pkg/daemon.applyDefaults)")
 	timeout := fs.Duration("timeout", 30*time.Second, "Total probe timeout")
 	fs.Parse(args)
+
+	if !lanternbuild.Network(*network).Valid() {
+		return fmt.Errorf("invalid --network %q: want one of mainnet, calibration", *network)
+	}
 
 	if err := os.MkdirAll(*dataDir, 0o700); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
@@ -98,7 +104,12 @@ func cmdProbe(args []string) error {
 
 	fmt.Printf("curio-core probe: starting embedded Lantern daemon\n")
 	fmt.Printf("  data-dir: %s\n", *dataDir)
-	fmt.Printf("  gateway:  %s\n", *gateway)
+	fmt.Printf("  network:  %s\n", *network)
+	if *gateway != "" {
+		fmt.Printf("  gateway:  %s\n", *gateway)
+	} else {
+		fmt.Printf("  gateway:  (default chosen per network)\n")
+	}
 	fmt.Printf("  timeout:  %s\n", *timeout)
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
@@ -115,6 +126,7 @@ func cmdProbe(args []string) error {
 		DataDir:      *dataDir,
 		Wallet:       w,
 		Gateway:      *gateway,
+		Network:      *network,
 		NoLibp2p:     true,
 		EmbeddedMode: true,
 	})
@@ -186,7 +198,8 @@ func defaultDataDir() string {
 func cmdRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	dataDir := fs.String("data-dir", defaultDataDir(), "Local data directory (wallet + headerstore live here)")
-	gateway := fs.String("gateway", "https://gateway.lantern.reiers.io", "Lantern gateway URL")
+	network := fs.String("network", string(lanternbuild.DefaultNetwork), "Filecoin network: mainnet | calibration")
+	gateway := fs.String("gateway", "", "Lantern gateway URL (default chosen per --network; see pkg/daemon.applyDefaults)")
 	dbPath := fs.String("db-path", "", "Path to the harmonysqlite state DB (default: <data-dir>/state.sqlite)")
 	listenAddr := fs.String("listen", "127.0.0.1:4711", "HTTP listen address for the WebUI / /setup flow")
 	noLantern := fs.Bool("no-lantern", false, "Skip the embedded Lantern daemon (engine + WebUI only; useful for first-run setup on a host without gateway access yet)")
@@ -206,6 +219,10 @@ Flags:
 		return err
 	}
 
+	if !lanternbuild.Network(*network).Valid() {
+		return fmt.Errorf("invalid --network %q: want one of mainnet, calibration", *network)
+	}
+
 	if err := os.MkdirAll(*dataDir, 0o700); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
 	}
@@ -219,6 +236,7 @@ Flags:
 	// --- Bring up the engine ---
 	fmt.Printf("curio-core run: starting daemon\n")
 	fmt.Printf("  data-dir: %s\n", *dataDir)
+	fmt.Printf("  network:  %s\n", *network)
 	fmt.Printf("  db-path:  %s\n", *dbPath)
 	fmt.Printf("  listen:   %s\n", *listenAddr)
 
@@ -256,6 +274,7 @@ Flags:
 			DataDir:      *dataDir,
 			Wallet:       w,
 			Gateway:      *gateway,
+			Network:      *network,
 			NoLibp2p:     true,
 			EmbeddedMode: true,
 		})

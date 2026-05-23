@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/Reiers/lantern v1.2.2-0.20260522222332-9177a99e6581
+	github.com/Reiers/lantern v1.4.1-0.20260523140040-9f9f5097a0a4
 	github.com/ethereum/go-ethereum v1.17.2
 	github.com/filecoin-project/curio v1.28.2-0.20260522154309-2153109777fa
 	github.com/filecoin-project/go-address v1.2.0
