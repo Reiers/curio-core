@@ -2,7 +2,7 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-24 16:00 CEST** (Day 8 COMPLETE + #56 P5 driven end-to-end on calibration: dataset id 13977 live, piece added, InitProvingPeriod broadcast, proof window opens ~17:47 CEST. Lantern v1.5.1 shipped with `eth_getBlockByNumber` ETH-shape fix. SP provider id is **26** as of today after state.sqlite wipe rotated the wallet.)
+Last updated: **2026-05-24 16:25 CEST** (Day 8 + #56 P5 + #57 + #59 all shipped today; daemon running 0 ERROR / 0 WARN on calibration; awaiting proof window at ~17:47 CEST.)
 
 ## Day 8 status: COMPLETE
 
@@ -95,7 +95,11 @@ The "drive a real PDP proof through the loop" workstream is most of the way thro
 
 ## Active follow-on tickets (filed today)
 
-- **[#57](https://github.com/Reiers/curio-core/issues/57)** (p1, bug): pdpv0 lifecycle hardening — `task_prove.go` MaxFailures pinning + `save_cache_task_id` FK gap + `notify_task.go` silent data leak. Surfaced by the audit on #29 (closed). Capri's decision: ship our own migrations + sweeper in curio-core's local diff; don't wait for upstream.
+- ~~**[#57](https://github.com/Reiers/curio-core/issues/57)**~~ (closed 16:20 CEST). Three lifecycle hardening pieces:
+  - **New tipset-driven `lifecycle_sweeper.go`** (fork commits 1e752f8 + c4d2e5c): runs every ~10-15s, re-arms data sets where ProveTask MaxFailures stranded them in the `prove_at_epoch IS NOT NULL AND challenge_request_msg_hash IS NULL` shape; surfaces stuck `pdp_piece_uploads` for observability.
+  - **`task_prove.go` RetryWait** linear 30/60/90/120 across MaxFailures=5 (~5 min total budget). Previously fired retries back-to-back.
+  - **Schema 0016**: SQLite table-rebuild adds FK `ON DELETE SET NULL` on `pdp_piece_uploads.notify_task_id` + `pdp_piecerefs.needs_indexing` + `.indexing_task_id`.
+  Live verification: 0 ERROR / 0 WARN in 60s of runtime post-deploy; sweeper correctly does NOT match the healthy dataset 13977.
 - **[#58](https://github.com/Reiers/curio-core/issues/58)** (p2, bug): `sender.Send` double-send race on transient-error retry. Audit-shaped ticket; needs a decision on (A) tx-hash lookup pre-broadcast vs (B) cache tx-hash even on broadcast error.
 - ~~**[#59](https://github.com/Reiers/curio-core/issues/59)**~~ (closed 16:05 CEST). Three SQLite portability bugs surfaced live during the P5 push were all fixed:
   - `pdp/indexing.go` `EnableIndexingForPiecesInTx` — `ANY($2)` with `[]int64` rewritten to IN-list (Reiers/curio @249dd68)
@@ -103,9 +107,13 @@ The "drive a real PDP proof through the loop" workstream is most of the way thro
   - `pdp_piece_pulls` schema rewritten to faithfully match upstream `20260109-pdp-v0-pull.sql` (curio-core @9e3a1b3); applied to live state.sqlite via direct DROP+CREATE.
   Daemon now logs 0 errors in 60s of runtime; previously each ~30s tipset cycle logged at least one of these three.
 
-## Closed today (13 issues)
+## Closed today (14 issues)
 
-[#7](https://github.com/Reiers/curio-core/issues/7), [#8](https://github.com/Reiers/curio-core/issues/8), [#13](https://github.com/Reiers/curio-core/issues/13), [#16](https://github.com/Reiers/curio-core/issues/16), [#17](https://github.com/Reiers/curio-core/issues/17), [#29](https://github.com/Reiers/curio-core/issues/29) (audit), [#30](https://github.com/Reiers/curio-core/issues/30) (audit), [#31](https://github.com/Reiers/curio-core/issues/31) (audit), [#38](https://github.com/Reiers/curio-core/issues/38), [#46](https://github.com/Reiers/curio-core/issues/46), [#54](https://github.com/Reiers/curio-core/issues/54), [#55](https://github.com/Reiers/curio-core/issues/55), [#59](https://github.com/Reiers/curio-core/issues/59).
+[#7](https://github.com/Reiers/curio-core/issues/7), [#8](https://github.com/Reiers/curio-core/issues/8), [#13](https://github.com/Reiers/curio-core/issues/13), [#16](https://github.com/Reiers/curio-core/issues/16), [#17](https://github.com/Reiers/curio-core/issues/17), [#29](https://github.com/Reiers/curio-core/issues/29) (audit), [#30](https://github.com/Reiers/curio-core/issues/30) (audit), [#31](https://github.com/Reiers/curio-core/issues/31) (audit), [#38](https://github.com/Reiers/curio-core/issues/38), [#46](https://github.com/Reiers/curio-core/issues/46), [#54](https://github.com/Reiers/curio-core/issues/54), [#55](https://github.com/Reiers/curio-core/issues/55), [#57](https://github.com/Reiers/curio-core/issues/57), [#59](https://github.com/Reiers/curio-core/issues/59).
+
+## Product vision filed (#60)
+
+Nicklas flagged at 16:08 CEST: Curio Core should be a turnkey Hot Storage product for laptop / regular-desktop deployments. Anyone can install, pick provider or client role, do guided setup, connect Brave/MetaMask wallet, run hot storage end-to-end. Monetization via small client-side commission on payment rails + optional premium UI subscription. Filed as [#60](https://github.com/Reiers/curio-core/issues/60) so the product shape stays anchored. Technical workstreams (`#40` wallet, `#36` retrieval gateway, `#37` settlement, `#39` SP dashboard, `#42` IPNI, `#52` client CLI) all align with this vision; the new ones (single-binary installer, WalletConnect, monetization layer, premium UI gating) will be filed when we pivot to the V0.1 turnkey release after #56 P5 closes.
 
 ## Files of record
 
