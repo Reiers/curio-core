@@ -187,3 +187,130 @@ func TestEncodeDecode_RoundTrip(t *testing.T) {
 		t.Errorf("round-trip mismatch:\nin:  %+v\nout: %+v\ntoml:\n%s", in, out, blob)
 	}
 }
+
+// TestSetField_PartialThenComplete asserts that setting fields one at
+// a time via the CLI shape produces a complete config that Status()
+// reports as ready.
+func TestSetField_PartialThenComplete(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+
+	// Start fresh: Status should report all three missing.
+	st, err := Status(ctx, db)
+	if err != nil {
+		t.Fatalf("Status (fresh): %v", err)
+	}
+	if !st.NeedsSetup || len(st.Missing) != 3 {
+		t.Fatalf("fresh Status: %+v", st)
+	}
+
+	// Set fields one at a time; each step is a successful partial write.
+	if err := SetField(ctx, db, "pdp.miner-id", "f03678816"); err != nil {
+		t.Fatalf("SetField miner-id: %v", err)
+	}
+	if err := SetField(ctx, db, "pdp.wallet", "0xf73Aa7b26Cd1fd30A7D5039842E13A8C7344CfEe"); err != nil {
+		t.Fatalf("SetField wallet: %v", err)
+	}
+	if err := SetField(ctx, db, "pdp.market", "0x02925630df557F957f70E112bA06e50965417CA0"); err != nil {
+		t.Fatalf("SetField market: %v", err)
+	}
+
+	// Status now reports complete.
+	st, err = Status(ctx, db)
+	if err != nil {
+		t.Fatalf("Status (after all 3): %v", err)
+	}
+	if st.NeedsSetup {
+		t.Errorf("Status.NeedsSetup = true after all 3 set; want false (missing: %v)", st.Missing)
+	}
+
+	// ReadDefaultLayer round-trips the values.
+	cfg, err := ReadDefaultLayer(ctx, db)
+	if err != nil {
+		t.Fatalf("ReadDefaultLayer: %v", err)
+	}
+	if cfg.Pdp.MinerID != "f03678816" {
+		t.Errorf("MinerID = %q", cfg.Pdp.MinerID)
+	}
+	if cfg.Pdp.WalletAddress != "0xf73Aa7b26Cd1fd30A7D5039842E13A8C7344CfEe" {
+		t.Errorf("WalletAddress = %q", cfg.Pdp.WalletAddress)
+	}
+	if cfg.Pdp.MarketAddress != "0x02925630df557F957f70E112bA06e50965417CA0" {
+		t.Errorf("MarketAddress = %q", cfg.Pdp.MarketAddress)
+	}
+}
+
+// TestSetField_AliasesAccepted covers the various field-name aliases
+// the CLI accepts (pdp.miner-id, miner_id, minerid, etc).
+func TestSetField_AliasesAccepted(t *testing.T) {
+	ctx := context.Background()
+
+	cases := []struct {
+		alias string
+		want  func(c ConfigBundle) string
+	}{
+		{"pdp.miner-id", func(c ConfigBundle) string { return c.Pdp.MinerID }},
+		{"miner_id", func(c ConfigBundle) string { return c.Pdp.MinerID }},
+		{"MINER-ID", func(c ConfigBundle) string { return c.Pdp.MinerID }},
+		{"pdp.wallet", func(c ConfigBundle) string { return c.Pdp.WalletAddress }},
+		{"wallet_address", func(c ConfigBundle) string { return c.Pdp.WalletAddress }},
+		{"pdp.market", func(c ConfigBundle) string { return c.Pdp.MarketAddress }},
+		{"market_address", func(c ConfigBundle) string { return c.Pdp.MarketAddress }},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.alias, func(t *testing.T) {
+			db := newTestDB(t)
+			if err := SetField(ctx, db, c.alias, "TESTVAL"); err != nil {
+				t.Fatalf("SetField %q: %v", c.alias, err)
+			}
+			cfg, err := ReadDefaultLayer(ctx, db)
+			if err != nil {
+				t.Fatalf("ReadDefaultLayer: %v", err)
+			}
+			if got := c.want(cfg); got != "TESTVAL" {
+				t.Errorf("alias %q stored at wrong field; got %q", c.alias, got)
+			}
+		})
+	}
+}
+
+// TestSetField_UnknownField asserts SetField rejects bad field names.
+func TestSetField_UnknownField(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	err := SetField(ctx, db, "pdp.bogus", "anything")
+	if err == nil {
+		t.Fatal("SetField pdp.bogus: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown config field") {
+		t.Errorf("error message %q; want 'unknown config field'", err.Error())
+	}
+}
+
+// TestSetField_PreservesOtherFields asserts setting one field doesn't
+// blank the others. (Read-mutate-write must preserve the rest.)
+func TestSetField_PreservesOtherFields(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+
+	// Set all three.
+	_ = SetField(ctx, db, "pdp.miner-id", "f0111")
+	_ = SetField(ctx, db, "pdp.wallet", "0xWALLET")
+	_ = SetField(ctx, db, "pdp.market", "0xMARKET")
+
+	// Re-set just miner-id.
+	if err := SetField(ctx, db, "pdp.miner-id", "f0222"); err != nil {
+		t.Fatalf("SetField re-miner-id: %v", err)
+	}
+	cfg, _ := ReadDefaultLayer(ctx, db)
+	if cfg.Pdp.MinerID != "f0222" {
+		t.Errorf("MinerID = %q, want f0222", cfg.Pdp.MinerID)
+	}
+	if cfg.Pdp.WalletAddress != "0xWALLET" {
+		t.Errorf("WalletAddress lost: %q", cfg.Pdp.WalletAddress)
+	}
+	if cfg.Pdp.MarketAddress != "0xMARKET" {
+		t.Errorf("MarketAddress lost: %q", cfg.Pdp.MarketAddress)
+	}
+}

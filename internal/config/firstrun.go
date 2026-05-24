@@ -182,3 +182,76 @@ func encodeBundle(cfg ConfigBundle) (string, error) {
 	}
 	return buf.String(), nil
 }
+
+// --- Partial-set helpers for the curio-core config CLI ---------------
+//
+// The WebUI flow uses UpsertDefaultLayer (full bundle, all required
+// fields). The CLI flow exposes per-field updates so headless installs
+// can populate one field at a time. Both write to the same SQLite row;
+// they're alternative paths to the same end state.
+
+// ReadDefaultLayer returns the current bundle, or a zero bundle when
+// no row exists yet. Unlike Status, the second return value is the
+// raw error for callers that need to distinguish "row absent" (treated
+// as zero bundle here) from genuine DB failures.
+func ReadDefaultLayer(ctx context.Context, db *harmonysqlite.DB) (ConfigBundle, error) {
+	var blob string
+	row := db.QueryRow(ctx, `SELECT config FROM harmony_config WHERE title = ?`, DefaultLayerName)
+	err := row.Scan(&blob)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return ConfigBundle{}, nil
+	case err != nil:
+		return ConfigBundle{}, fmt.Errorf("config: read default layer: %w", err)
+	}
+	return decodeBundle(blob)
+}
+
+// WriteDefaultLayer is the partial-allowed variant of UpsertDefaultLayer.
+// Required fields may be empty; callers are responsible for checking
+// completeness via Status() before launching curio-core run.
+//
+// CLI usage: read -> mutate one field -> write. Run-time validation
+// remains in Status / the run command's startup check.
+func WriteDefaultLayer(ctx context.Context, db *harmonysqlite.DB, cfg ConfigBundle) error {
+	body, err := encodeBundle(cfg)
+	if err != nil {
+		return fmt.Errorf("config: encode bundle: %w", err)
+	}
+	_, err = db.Exec(ctx, `
+		INSERT INTO harmony_config (title, config) VALUES (?, ?)
+		ON CONFLICT(title) DO UPDATE SET config = excluded.config`,
+		DefaultLayerName, body)
+	if err != nil {
+		return fmt.Errorf("config: write default layer: %w", err)
+	}
+	return nil
+}
+
+// SetField is the per-field convenience. Reads the current bundle,
+// mutates one field, writes back. Unknown field names return an error.
+//
+// Accepted names (case-insensitive):
+//
+//	pdp.miner-id / miner_id / minerid    -> Pdp.MinerID
+//	pdp.wallet   / wallet_address        -> Pdp.WalletAddress
+//	pdp.market   / market_address        -> Pdp.MarketAddress
+func SetField(ctx context.Context, db *harmonysqlite.DB, field, value string) error {
+	cur, err := ReadDefaultLayer(ctx, db)
+	if err != nil {
+		return err
+	}
+	field = strings.ToLower(strings.TrimSpace(field))
+	value = strings.TrimSpace(value)
+	switch field {
+	case "pdp.miner-id", "miner_id", "minerid", "miner-id":
+		cur.Pdp.MinerID = value
+	case "pdp.wallet", "wallet_address", "wallet":
+		cur.Pdp.WalletAddress = value
+	case "pdp.market", "market_address", "market":
+		cur.Pdp.MarketAddress = value
+	default:
+		return fmt.Errorf("unknown config field %q (known: pdp.miner-id, pdp.wallet, pdp.market)", field)
+	}
+	return WriteDefaultLayer(ctx, db, cur)
+}

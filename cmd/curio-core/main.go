@@ -77,6 +77,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "curio-core sp: %v\n", err)
 			os.Exit(1)
 		}
+	case "config":
+		if err := cmdConfig(args); err != nil {
+			fmt.Fprintf(os.Stderr, "curio-core config: %v\n", err)
+			os.Exit(1)
+		}
 	case "version":
 		fmt.Println("curio-core 0.0.1-prealpha")
 	case "-h", "--help", "help":
