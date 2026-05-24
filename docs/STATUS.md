@@ -2,7 +2,7 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-24 16:25 CEST** (Day 8 + #56 P5 + #57 + #59 all shipped today; daemon running 0 ERROR / 0 WARN on calibration; awaiting proof window at ~17:47 CEST.)
+Last updated: **2026-05-24 16:55 CEST** (Day 8 + #56 P5 + #57 + #58 + #59 + #61 + #4 all closed today; daemon running 0 ERROR / 0 WARN on calibration; awaiting proof window at ~17:47 CEST.)
 
 ## Day 8 status: COMPLETE
 
@@ -107,9 +107,9 @@ The "drive a real PDP proof through the loop" workstream is most of the way thro
   - `pdp_piece_pulls` schema rewritten to faithfully match upstream `20260109-pdp-v0-pull.sql` (curio-core @9e3a1b3); applied to live state.sqlite via direct DROP+CREATE.
   Daemon now logs 0 errors in 60s of runtime; previously each ~30s tipset cycle logged at least one of these three.
 
-## Closed today (15 issues)
+## Closed today (17 issues)
 
-[#7](https://github.com/Reiers/curio-core/issues/7), [#8](https://github.com/Reiers/curio-core/issues/8), [#13](https://github.com/Reiers/curio-core/issues/13), [#16](https://github.com/Reiers/curio-core/issues/16), [#17](https://github.com/Reiers/curio-core/issues/17), [#29](https://github.com/Reiers/curio-core/issues/29) (audit), [#30](https://github.com/Reiers/curio-core/issues/30) (audit), [#31](https://github.com/Reiers/curio-core/issues/31) (audit), [#38](https://github.com/Reiers/curio-core/issues/38), [#46](https://github.com/Reiers/curio-core/issues/46), [#54](https://github.com/Reiers/curio-core/issues/54), [#55](https://github.com/Reiers/curio-core/issues/55), [#57](https://github.com/Reiers/curio-core/issues/57), [#58](https://github.com/Reiers/curio-core/issues/58) (audit), [#59](https://github.com/Reiers/curio-core/issues/59).
+[#4](https://github.com/Reiers/curio-core/issues/4) (strategy decided), [#7](https://github.com/Reiers/curio-core/issues/7), [#8](https://github.com/Reiers/curio-core/issues/8), [#13](https://github.com/Reiers/curio-core/issues/13), [#16](https://github.com/Reiers/curio-core/issues/16), [#17](https://github.com/Reiers/curio-core/issues/17), [#29](https://github.com/Reiers/curio-core/issues/29) (audit), [#30](https://github.com/Reiers/curio-core/issues/30) (audit), [#31](https://github.com/Reiers/curio-core/issues/31) (audit), [#38](https://github.com/Reiers/curio-core/issues/38), [#46](https://github.com/Reiers/curio-core/issues/46), [#54](https://github.com/Reiers/curio-core/issues/54), [#55](https://github.com/Reiers/curio-core/issues/55), [#57](https://github.com/Reiers/curio-core/issues/57), [#58](https://github.com/Reiers/curio-core/issues/58) (audit), [#59](https://github.com/Reiers/curio-core/issues/59), [#61](https://github.com/Reiers/curio-core/issues/61).
 
 ## Product vision filed (#60)
 
