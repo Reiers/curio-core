@@ -2,109 +2,111 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-23 14:30 CEST** (Day 7 MILESTONE: PDPNotifyTask running inside curio-core, scheduled by harmonytask, against SQLite. The sealer wall sidestepped via piece-CID subpackage extraction).
+Last updated: **2026-05-24 14:30 CEST** (Day 8 COMPLETE: first on-chain tx via curio-core pipeline, SP registered as calibration provider id 25, CurioChainSched + watchers live, synapse-sdk HTTP compat suite green, runtime-network-aware contracts. #56 P1–P4 shipped, P5 in progress.)
 
-## Day 7 milestone hit
+## Day 8 status: COMPLETE
 
-A real upstream PDP task instance (`PDPNotifyTask`, unmodified from upstream Curio) is running inside curio-core, scheduled by harmonytask, polling SQLite for pdp_piece_uploads. 10 seconds of clean runtime, no errors. The scheduler architecture is proven end-to-end.
+End-to-end on-chain pipeline now closes. Every sub-milestone P1–P7 shipped in a single working day; final commit at 2026-05-24 11:21 CEST.
 
-The sealer carve-out (#11) was sidestepped, not solved: extracted the one function pdpv0 needed from the heavy `curio/pdp` package into a pure-Go subpackage `curio/pdp/piececid`. That cut the entire `curio/deps -> lotus/storage/sealer` transitive chain from pdpv0's import graph.
+- **P1 — ethkeys bootstrap + SenderETH wiring + VMBridge configured** (7b1cc00, 174dc86, 943a3bd, ebdd298). curio-core mints its own ETH key on first run, the `SenderETH` task pulls signed payloads through, and `eth_*` traffic routes via the embedded Lantern VMBridge.
+- **P2 — first on-chain tx via the curio-core pipeline** (f504592, 8f3cdc8, cee15c9). 1-wei self-transfer landed in calibration block 3742933 from the `admin/test-tx` endpoint. Closed [#17](https://github.com/Reiers/curio-core/issues/17) (timestamp scan fix in harmonysqlite) + [#54](https://github.com/Reiers/curio-core/issues/54) (slice-of-scalar Select).
+- **P3 — SP registered as calibration provider id 25** (350e2b4, 93263d4, 523cd13). `curio-core wallet`, `curio-core doctor`, and `curio-core sp register --submit` operator CLIs shipped; 7 PDPv0 capability fields populated on-chain. Closed [#38](https://github.com/Reiers/curio-core/issues/38), [#40 part 1](https://github.com/Reiers/curio-core/issues/40), [#41](https://github.com/Reiers/curio-core/issues/41).
+- **P4 — CurioChainSched + 3 watcher handlers wired on tipset sub** (d87bd5f, b636618, 5eec884). Paired with Lantern V1.5.0 `pkg/daemon` HeadChanges wiring; `TaskChainSync` plus the three pdpv0 watchers (`InitProvingPeriodWatch`, `NextProvingPeriodWatch`, `ProveWatch`) consume real tipsets cleanly end-to-end. Closed [#55](https://github.com/Reiers/curio-core/issues/55).
+- **P5 — synapse-sdk HTTP compatibility test suite** (aad1d6d). 8 tests + 6 route smoke subtests, opt-in via `CURIO_CORE_URL`. Closed [#13](https://github.com/Reiers/curio-core/issues/13).
+- **P6 — runtime-network-aware contract addresses** (aa7ef47). 40+ call-site refactor in the Reiers/curio fork across `pdp/`, `tasks/pdpv0/`, `lib/filecoinpayment/` so PDPVerifier / FilecoinPay / Payments / WarmStorage addresses are resolved from the live chain network at startup instead of being hard-coded. Closed [#46](https://github.com/Reiers/curio-core/issues/46).
+- **P7 — mainnet read-only probe + headless config CLI** (7fd5fce, 97f1646). `curio-core probe` now also targets mainnet; `curio-core config show|set|status` provides full headless setup. Closed [#7](https://github.com/Reiers/curio-core/issues/7) + [#8](https://github.com/Reiers/curio-core/issues/8).
 
-Follow-up: when curio-core wants to serve the `/pdp/*` HTTP API in-process (#13 synapse-sdk compat), the full `curio/pdp` import will be needed and #11 (or similar pattern of sub-package extractions) becomes the real work.
+Supporting work shipped same day: PDPVerifier v3.4.0 ABI bump in the fork ([#27](https://github.com/Reiers/curio-core/issues/27), 31fccd3), CLI error-scenario smoke matrix ([#50](https://github.com/Reiers/curio-core/issues/50), 2210347), 90 MB binary footprint enforced in CI ([#53](https://github.com/Reiers/curio-core/issues/53), 0be81ab), `pdp_data_set_piece_adds.pdp_pieceref` indexed ([#28](https://github.com/Reiers/curio-core/issues/28), 07a2b45), README rewritten as Hot Storage FoC product spec (7cbdba0).
 
-## Day 7 status: partial
+## #56 status: P1–P4 SHIPPED, P5 IN PROGRESS
 
-Shipped today:
-- harmonytask scheduler runs against SQLite (#5)
-- ANY($N) -> IN(?,?,?) cross-backend SQL helper (curio-fork sqlhelpers.go)
-- harmonysqlite Tx.SelectI implementation (scany-backed)
-- curio-core run polls SQLite cleanly, no errors, indefinitely
+The "drive a real PDP proof through the loop" workstream is most of the way through. Indexstore, parked-piece bridge, and the four proving tasks are all wired; only the synapse-sdk-driven signed-`extraData` flow remains.
 
-The wall:
-- Importing tasks/pdpv0 (to wire ANY task, even the trivial PDPNotifyTask)
-  compiles the whole pdpv0 package, which transitively imports
-  lotus/storage/sealer, which needs the !cgo carve-out from #11.
-- #11 promoted from p3 deferred to p1 Day 7 blocker.
-
-## Milestone: harmonytask scheduler running on SQLite (2026-05-23)
-
-The DB-seam refactor landed across three forks:
-- `Reiers/harmonyquery@db-interface` — new `DBInterface` + `TxInterface` + `RawString` exported type
-- `Reiers/curio@db-seam-refactor` — `harmonytask.cfg.db` is now `harmonyquery.DBInterface`; ~123 call sites in tasks/pdpv0 + tasks/pdp use the `*I`-suffixed methods
-- `curio-core@HEAD` — `*harmonysqlite.DB` implements `DBInterface` via 4 wrapper methods; `engine.Start` calls `harmonytask.NewWithReg` with the SQLite handle
-
-`curio-core run` boot confirms the scheduler goroutine starts: the harmonytask poller hits the DB on the first iteration. (One SQL dialect mismatch remains in the poller: pgx-style array params vs sqlite — Day 7 follow-up, not blocking.)
-
-## Milestone: linux+no-cgo build GREEN (2026-05-23)
-
-`CGO_ENABLED=0 GOOS=linux go build ./...` compiles the full curio-core binary pure-Go end to end. The "sealer + gosigar" wall in Day 6 notes turned out to be a darwin-only artifact: under GOOS=linux, gosigar's sigar_linux.go is pure-Go, and storage/sealer isn't reached by the pdpv0 import closure. The only missing piece was a !cgo split on `curio/harmony/resources/getGPU.go` (Reiers/curio@2233ce6, 10 LoC). Darwin carve-out is now a separate p3 issue (#11).
-
-## Scope (2026-05-23, Andy via Nicklas)
-
-- **pdpv0-only.** `tasks/pdp` (v1, mk20-deal-flow) is OUT. The `curio/market/mk20` transitive is no longer in our import graph.
-- **WebUI:** `pages/market/`, `pages/mk12-deal/`, `pages/mk12-deals/`, `pages/proofshare/`, `win-stats.mjs` all DROPPED. `pages/pdp/` is the operator deal-flow surface.
-- **`//go:build cgo` shim on `web/`:** fold-in to existing CGo carve-out (Reiers/curio `integ/task-pdp-pure-go` + Reiers/blooms). Scope-investigation 2026-05-23 found the remaining transitive deps are `lotus/storage/sealer` (worker_local, faults, manager_post), `curio/lib/proofsvc/common`, `curio/tasks/seal`, and `elastic/gosigar` (darwin sysctlbyname). Larger than the lib/paths split; deferred behind Day 7. Tracked at [Reiers/lantern#19](https://github.com/Reiers/lantern/issues/19) (extended scope) — no separate issue.
+- **P1 — SQLite-backed indexstore** (be85045). New `internal/sqliteindex` package, 9 unit tests, replaces the upstream YugabyteDB indexstore via the new interface.
+- **P2 — indexstore.Backend interface refactor in Reiers/curio fork** (134d23e). Fork now consumes the indexstore via a `Backend` interface so curio-core can plug in `internal/sqliteindex` and upstream stays free to keep its Yugabyte impl.
+- **P3.1 — `internal/parkcomplete` task** (d895436). Streaming-upload → `parked_pieces.complete` bridge, 11 unit tests. Closes the gap between the diskstash piece-upload path and the harmonytask piece-park lifecycle.
+- **P3.2 — `internal/localpiecepark.Reader`** (69581fd). `pieceprovider.PieceParkBackend` implementation over diskstash, 9 unit tests.
+- **P3.3 — cachedreader construction in curio-core** (69581fd). Confirmed `sectorReader == nil` is safe in the cachedreader code path under the pdpv0-only profile.
+- **P4 — ProveTask + InitProvingPeriodTask + NextProvingPeriodTask + SaveCache wired** (69581fd). All four proving-cycle tasks live in `pdpwire.BuildChainDeps` + `main.go` extraTasks; harmonytask registry now holds the full PDPv0 proving pipeline (13 task types).
+- **P5 — end-to-end signed-`extraData` synapse-sdk flow** — STILL OPEN. Need to drive a proof through the loop with the real synapse-sdk client signing the extraData. In progress now.
 
 ## What works today
 
-- `curio-core probe` boots an embedded Lantern, anchors against the live mainnet gateway, and shuts down cleanly. 25 MB pure-Go binary, `CGO_ENABLED=0`.
-- `curio-core run` starts the full daemon: SQLite state DB (auto-migrates) → harmonytask task registry (9 task types, pdpv0-only) → first-run config probe → optional embedded Lantern → WebUI with `/setup` flow. SIGTERM unwinds cleanly. Verified end-to-end against a fresh data-dir.
-- `internal/engine` wraps the SQLite handle + task registry + lifecycle. Single-server (no Peering layer); `harmony_machines` stays a single-row table keyed by HostAndPort. Registry holds 9 PDP v0 entries only (pdpv0-only scope per Andy 2026-05-23). The Day 6 v1 live-harvest work is preserved in git history at commit fd85e79 if v1 is ever reintroduced.
-- `internal/config` owns the `harmony_config` default-layer read/write (TOML-encoded `[Pdp]{MarketAddress, WalletAddress, MinerID}`).
-- `internal/setupweb` is the CGO-free /setup HTTP handler + middleware (redirect-to-/setup until configured, fall-through afterwards).
-- `internal/harmonysqlite` applies 14 migrations on `New()`, produces 55 SQLite tables (16 `pdp_*` + 39 infra), and passes its acceptance test suite (`go test ./internal/harmonysqlite/...`, 8 tests + ~50 subtests).
-- `internal/pieceio` defines the `PieceReader` interface that lets us avoid linking `curio/lib/ffi`.
-- `Reiers/curio` fork's `tasks/pdp` compiles under `CGO_ENABLED=0` against the `PieceReader` interface (milestone commit a1a4449 in this repo, paired with the corresponding fork commits in Reiers/curio). Day 6: fork also nil-guards `chainSched.AddHandler` in InitPP / NextPP / Prove constructors (Reiers/curio@49ff949).
-- `Reiers/blooms` (Reiers/lotus) fork: `storage/paths` CGo-bound methods split into `local_cgo.go` + `local_nocgo.go` stubs (Reiers/blooms@baf8b69) so the curio-core build chain no longer pulls filecoin-ffi linkage transitively for the PDP code path.
-- `web/` is the upstream Curio WebUI with porep/clustering/sealing panels stripped (`ab9990f`). Behind a `//go:build cgo` shim until the WebUI's transitive deps (gosigar, lotus storage paths, curio ffi) are carved out.
+- `curio-core probe` boots an embedded Lantern, anchors against either calibration or live mainnet gateway, and shuts down cleanly. 25 MB pure-Go binary, `CGO_ENABLED=0`. CI enforces a 90 MB hard upper bound.
+- `curio-core run` starts the full daemon: SQLite state DB (auto-migrates) → harmonytask task registry (13 PDPv0 entries: 9 original + ProveTask + InitProvingPeriodTask + NextProvingPeriodTask + SaveCache) → first-run config probe → embedded Lantern with VMBridge → WebUI with `/setup` flow → admin/test-tx + admin endpoints. SIGTERM unwinds cleanly.
+- **First on-chain tx through the pipeline:** 1-wei self-transfer landed in calibration block **3742933** via `admin/test-tx`, signed by the curio-core-minted ETH key, sent via SenderETH → Lantern VMBridge.
+- **SP registered on calibration as provider id 25.** `curio-core sp register --submit` broadcast the registration with 7 PDPv0 capability fields populated.
+- **CurioChainSched + 3 pdpv0 watchers** consume Lantern's HeadChanges sub on every tipset; `TaskChainSync` plus `InitProvingPeriodWatch`, `NextProvingPeriodWatch`, `ProveWatch` all run clean.
+- **synapse-sdk HTTP compatibility:** 8 tests + 6 route smoke subtests pass against a running curio-core when `CURIO_CORE_URL` is set.
+- **Runtime-network-aware contract addresses.** PDPVerifier (v3.4.0 ABI), FilecoinPay, Payments, WarmStorage resolve from the live chain network at startup; no more compile-time constants for these.
+- **Operator CLIs:**
+  - `curio-core config show|set|status` — headless first-run setup (no WebUI required)
+  - `curio-core wallet ...` — operator ETH wallet management
+  - `curio-core doctor` — pre-flight diagnostics
+  - `curio-core sp register [--submit]` — calibration/mainnet SP registry registration
+- `internal/engine` wraps the SQLite handle + task registry + lifecycle. Single-server (no Peering layer); `harmony_machines` stays a single-row table keyed by HostAndPort.
+- `internal/config` owns the `harmony_config` default-layer read/write (TOML-encoded `[Pdp]{MarketAddress, WalletAddress, MinerID}` plus the eth-key state).
+- `internal/setupweb` is the CGO-free /setup HTTP handler + middleware.
+- `internal/harmonysqlite` applies 14 migrations on `New()`, produces 55 SQLite tables (16 `pdp_*` + 39 infra). Both Select paths + `QueryRowI` route through `scanWithTimeFix`; `(*DB).Select` now also accepts slice-of-scalar destinations.
+- `internal/sqliteindex` (#56 P1) is a SQLite-backed `indexstore.Backend` with 9 unit tests; replaces the upstream YugabyteDB indexstore inside the pdpv0 import graph.
+- `internal/parkcomplete` (#56 P3.1) bridges streaming uploads to `parked_pieces.complete`; 11 unit tests.
+- `internal/localpiecepark` (#56 P3.2) implements `pieceprovider.PieceParkBackend` over diskstash; 9 unit tests.
+- `internal/ethclient` + `pdpwire` route `eth_*` calls through the embedded Lantern over `/rpc/v1` with a self-minted token; 6+ extra `eth_*` methods served via VMBridge fallback (Lantern bumps a115cc21ac5d, 9621aa8a2125).
+- `Reiers/curio` fork's `tasks/pdp` + `tasks/pdpv0` compile under `CGO_ENABLED=0`, network-aware addresses, PDPVerifier v3.4.0 ABI, `indexstore.Backend` interface seam.
+- `Reiers/blooms` (lotus fork): `storage/paths` CGo-bound methods split into `local_cgo.go` + `local_nocgo.go` stubs.
+- `web/` is the upstream Curio WebUI with porep/clustering/sealing panels stripped. Behind a `//go:build cgo` shim.
 - `CGO_ENABLED=0 go build ./...` is green.
 - `CGO_ENABLED=0 go test ./internal/... ./cmd/...` is green.
 
-## What doesn't work yet
+## What's left
 
-- The harmonytask scheduler goroutine is STILL not running. `harmonytask.New` takes a concrete `*harmonydb.DB` (pgx-backed); plugging in our SQLite handle remains blocked on the fork-side DB-interface refactor. Day 6 went deeper into the surface and concluded the refactor is bigger than the original estimate — it requires changes across three modules (curiostorage/harmonyquery, Reiers/curio's harmonytask + resources, callers like `BeginTransaction(ctx, func(tx *harmonydb.Tx))` whose closure signature is part of the public API). Tracked in [Reiers/lantern#22](https://github.com/Reiers/lantern/issues/22). See `docs/DAY-6-NOTES.md` § "Deferred work".
-- PDP v0 task descriptors are still static literals (9 of them). Day 6's lotus carve-out covered `storage/paths` but the transitive blocker for `tasks/pdpv0` is `lotus/storage/sealer` (worker_local, faults, manager_post; all CGo-heavy) plus `elastic/gosigar`'s darwin sysctlbyname under `CGO_ENABLED=0`. Both deferred to a later carve-out workstream; tracked in [Reiers/lantern#22](https://github.com/Reiers/lantern/issues/22) (which references the broader lotus carve-out tracking #19).
-- `internal/pdptests/` remains gated behind `//go:build pdp_full_carveout` for the same reason. Drop-gate-and-test acceptance is deferred.
-- No calibration miner running curio-core end-to-end. Day 7-8.
+- **#56 P5** — end-to-end signed-`extraData` synapse-sdk flow that actually drives a proof through the full ProveTask → InitProvingPeriodTask → NextProvingPeriodTask → SaveCache loop. In progress.
+- WebUI `//go:build cgo` shim still gates pages/pdp/. Carving out gosigar (darwin), `lotus/storage/sealer`, `curio/lib/proofsvc/common`, and `curio/tasks/seal` is deferred behind Day 8 close.
+- `internal/pdptests/` still gated behind `//go:build pdp_full_carveout`; drop-gate acceptance deferred.
+- No mainnet end-to-end yet; the mainnet SP Registry address is wired (7fd5fce, #7 closed) but actual mainnet registration + proving is a separate workstream.
 
 ## Files of record
 
 | File | What it holds |
 |---|---|
-| `README.md` | Public-facing overview + design philosophy |
+| `README.md` | Public-facing overview + Hot Storage FoC product spec |
 | `docs/PLAN.md` | Day-by-day plan with acceptance criteria |
 | `docs/STATUS.md` | This file — live status |
 | `docs/SCOPE-DIFF.md` | What's in scope vs upstream Curio |
 | `docs/RECON-2026-05-23.md` | Day 1 recon notes (frozen) |
 | `docs/SQL-CLASSIFICATION.md` | 118-file classification of upstream Curio migrations |
 | `docs/DAY-3-NOTES.md` | Day 3 close: SQL port details, translation patterns, deferred items |
+| `docs/DAY-6-NOTES.md` | Day 6 close: lotus/storage carve-out scoping |
 | `docs/WEBUI-STRIP-NOTES.md` | Day 3 partial: WebUI strip details + deferred items |
 | `internal/harmonysqlite/schema-curio-core/PORT-STATUS.md` | Per-migration port status |
 
 ## Commit log highlights
 
-```
-2d0b569 design: Curio Core mark + wordmark + README rewrite
-951613f harmonysqlite: SQL classification + Postgres→SQLite migration port (Day 3)
-ea01394 pdptests: scaffold + 0007-0009 schema migrations
-948d2aa harmonysqlite: move SQLite schema to schema-curio-core/ (escape upstream auto-sync)
-82c63bc harmonysqlite: harmonytask schema migrations + apply runner (Day 4 partial)
-ab9990f web: vendor Curio WebUI, strip porep/clustering/sealing panels
-a1a4449 milestone: tasks/pdp compiles under CGO_ENABLED=0
-0efb5b6 wip: pull in Curio integ/task via Reiers/curio fork (CGo carveout in progress)
-775f7c5 ci: GitHub Actions workflow (mirrors lantern's setup)
-94348ee harmonysqlite: SQLite scaffold + claim-pattern smoke test (Day 3 down payment)
-d67c889 bones: embed Lantern daemon + PieceReader interface (Day 2)
-21e590b docs: day 1 recon
-7079a1c init: fresh charter (PDP-only Curio + embedded Lantern bundle)
-```
+Day 8 + #56 ship train (most recent first):
 
-## Outstanding questions to Andy (live in issue #11)
-
-See `docs/PLAN.md` § Open questions. Eight concrete items, all in the consolidated comment posted 2026-05-23.
+```
+69581fd Wire ProveTask + InitPP + NextPP + SaveCache (#56 P3.2 + P3.3 + P4)
+d895436 internal/parkcomplete: streaming-upload -> parked_pieces.complete bridge (#56 P3.1)
+134d23e deps: bump Reiers/curio fork to 0d801c5 (indexstore.Backend interface)
+be85045 internal/sqliteindex: SQLite-backed indexstore.Backend implementation (#56 P1)
+97f1646 config: headless CLI for first-run setup (closes #8)
+aa7ef47 pdpwire + synapsecompat: runtime network propagation + on-chain compat tests (closes #46)
+7fd5fce sp register: add mainnet SP Registry address (closes #7)
+aad1d6d internal/synapsecompat: synapse-sdk HTTP compatibility test suite (closes #13)
+5eec884 engine: wire CurioChainSched + 3 pdpv0 watchers on tipset sub (Day 8 P4)
+b636618 TaskChainSync runs clean end-to-end on calibration (closes #55 part 2)
+523cd13 doctor + sp: two new operator CLIs (closes #41, partial #38)
+31fccd3 deps: bump curio fork to 96fea60b85a6 (PDPVerifier v3.4.0 ABI, closes #27)
+350e2b4 wallet: operator wallet management CLI (closes #40 part 1)
+ebdd298 deps: bump lantern to a115cc21ac5d (6 more eth_* via VMBridge, closes #34)
+7b1cc00 Day 8 P1: ethkeys bootstrap + SenderETH wiring + VMBridge config
+c9f493f diskstash + pdpwire: first end-to-end piece upload works
+```
 
 ## Operating notes
 
 - Don't track `internal/harmonysqlite/migrations/` — that path is gitignored because background tooling auto-syncs it from the upstream Curio module cache, which would clobber the curio-core canonical schema at `schema-curio-core/`.
 - `cmd/inspect-tables/` is a dev tool: dumps the SQLite schema produced by `harmonysqlite.New()` to stdout. Not shipped in release builds.
 - `internal/curiowire/` is scratch space used during the Day 2 + 4 wire-up to surface Curio compilation gaps. May be deleted once the bundle stabilizes.
+- `scripts/check-footprint` enforces a 90 MB hard limit on the curio-core binary in CI (#53).
+- `admin/test-tx` is the canonical "is the on-chain sender pipeline alive" endpoint; first successful invocation landed in calibration block 3742933.
