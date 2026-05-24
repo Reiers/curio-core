@@ -312,6 +312,231 @@ func TestUploadPieceFullFlow(t *testing.T) {
 	}
 }
 
+// ---------- On-chain write paths -----------------------------------
+//
+// These tests drive endpoints that broadcast Filecoin txes via the SP's
+// SenderETH harmonytask. Skipped by default to avoid burning gas on
+// every test run. Opt in by setting CURIO_CORE_ONCHAIN=1.
+//
+// Prerequisites for these tests to PASS (vs surface real errors):
+//
+//   1. The daemon's eth_keys wallet must be funded with calibration
+//      tFIL (the calibration faucet drips on request).
+//   2. For the create-data-set path: provider id 25 (the SP registered
+//      on calibration) must be bound to the wallet currently in
+//      eth_keys. The state.sqlite-wipe pattern from earlier sessions
+//      orphans the provider id; re-binding requires importing the
+//      original wallet key OR re-registering as a new provider id.
+//   3. The recordKeeper (FWSS proxy) must accept on-chain interactions
+//      from non-approved providers (it does today — approvedProviders
+//      is informational, not a hard gate in dataSetCreated callback).
+//
+// Without these, the tests will still SURFACE compat issues (the SP's
+// HTTP handler returning 500 on a well-formed body would still be a
+// real bug). They just won't reach the on-chain success path.
+
+const onChainEnvVar = "CURIO_CORE_ONCHAIN"
+
+// FWSS proxy addresses, per FilOzone/filecoin-services
+// service_contracts/deployments.json (chain id 314 / 314159).
+const (
+	fwssCalibration = "0x02925630df557F957f70E112bA06e50965417CA0"
+	fwssMainnet     = "0x8408502033C418E1bbC97cE9ac48E5528F371A9f"
+)
+
+func requireOnChain(t *testing.T) {
+	t.Helper()
+	if os.Getenv(onChainEnvVar) == "" {
+		t.Skipf("%s not set; skipping on-chain write test (would broadcast a tx and consume gas)", onChainEnvVar)
+	}
+}
+
+// fwssAddressForBase picks the FWSS proxy that matches the daemon's
+// network. Falls back to calibration when CURIO_CORE_NETWORK isn't set.
+func fwssAddressForBase() string {
+	if os.Getenv("CURIO_CORE_NETWORK") == "mainnet" {
+		return fwssMainnet
+	}
+	return fwssCalibration
+}
+
+// TestCreateDataSetCompat: SDK create-dataset.ts hits
+// POST /pdp/data-sets with {recordKeeper, extraData}. Expects 201
+// + Location: /pdp/data-sets/created/{txHash}.
+//
+// Driven shape:
+//
+//	request:  {"recordKeeper":"<FWSS_proxy>","extraData":"0x..."}
+//	response: 201 + Location header with the broadcast tx hash
+//
+// extraData here is deliberately a minimal placeholder (0x00). A real
+// synapse-sdk client builds the EIP-712-signed payload via
+// signCreateDataSet. The SP-side handler validates the body shape and
+// builds the on-chain createDataSet(recordKeeper, extraData) tx; the
+// SDK's typed-data validation happens later in the FWSS listener
+// callback (so a malformed extraData causes the on-chain tx to revert,
+// but the SP HTTP handler still returns 201 + a real txHash).
+//
+// Asserts: 201 + valid Location header. The downstream revert is
+// informative but not a compat failure; the SP did its job.
+func TestCreateDataSetCompat(t *testing.T) {
+	requireOnChain(t)
+	base := baseURL(t)
+
+	body, _ := json.Marshal(map[string]string{
+		"recordKeeper": fwssAddressForBase(),
+		"extraData":    "0x00",
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/pdp/data-sets", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /pdp/data-sets: %v", err)
+	}
+	defer resp.Body.Close()
+	rbody, _ := io.ReadAll(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusCreated:
+		loc := resp.Header.Get("Location")
+		if !strings.HasPrefix(loc, "/pdp/data-sets/created/") {
+			t.Errorf("Location=%q want prefix /pdp/data-sets/created/", loc)
+		}
+		txHash := loc[len("/pdp/data-sets/created/"):]
+		if !strings.HasPrefix(txHash, "0x") || len(txHash) != 66 {
+			t.Errorf("Location txHash=%q want 0x-prefixed 32-byte hex", txHash)
+		}
+		t.Logf("createDataSet broadcast txHash=%s; poll /pdp/data-sets/created/%s for on-chain status", txHash, txHash)
+	case http.StatusInternalServerError:
+		// Distinguish 'curio-core handler bug' (route, DB, JSON shape)
+		// from 'downstream contract revert on the dummy extraData=0x00'.
+		// The latter means the handler routed the request to the FWSS
+		// contract correctly; we just sent an unsigned payload it
+		// rejected. That's NOT a compat failure — a real synapse-sdk
+		// client builds a valid EIP-712 signed extraData and avoids
+		// this revert.
+		bodyStr := string(rbody)
+		if strings.Contains(bodyStr, "eth_estimateGas") &&
+			strings.Contains(bodyStr, "contract reverted") {
+			t.Logf("createDataSet reached on-chain layer; FWSS reverted on dummy extraData (expected): %q", bodyStr)
+			return
+		}
+		t.Errorf("createDataSet returned 500 (likely SenderETH or pdp_data_set_creates INSERT bug, NOT a contract revert): body=%q", bodyStr)
+	default:
+		t.Errorf("createDataSet: status=%d want 201 or 200 (body=%q)", resp.StatusCode, string(rbody))
+	}
+}
+
+// TestAddPiecesCompat: SDK add-pieces.ts hits
+// POST /pdp/data-sets/{id}/pieces with a body of pieces + extraData.
+// Expects 201 + Location: /pdp/data-sets/{id}/pieces/added/{txHash}.
+//
+// As with createDataSet, this asserts the SP's HTTP handler shape, not
+// the downstream on-chain success path. The data set ID is chosen
+// from CURIO_CORE_DATASET_ID env var; if unset, the test uses 1 (which
+// will likely not exist locally, surfacing a 404 vs 500 which is still
+// useful for catching dialect bugs).
+func TestAddPiecesCompat(t *testing.T) {
+	requireOnChain(t)
+	base := baseURL(t)
+
+	dataSetID := os.Getenv("CURIO_CORE_DATASET_ID")
+	if dataSetID == "" {
+		dataSetID = "1"
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"pieces": []map[string]any{
+			{
+				"pieceCid": knownGoodPieceCIDv2,
+				"subPieces": []map[string]string{
+					{"subPieceCid": knownGoodPieceCIDv2},
+				},
+			},
+		},
+		"extraData": "0x00",
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/pdp/data-sets/"+dataSetID+"/pieces", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /pdp/data-sets/%s/pieces: %v", dataSetID, err)
+	}
+	defer resp.Body.Close()
+	rbody, _ := io.ReadAll(resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusCreated:
+		loc := resp.Header.Get("Location")
+		wantPrefix := "/pdp/data-sets/" + dataSetID + "/pieces/added/"
+		if !strings.HasPrefix(loc, wantPrefix) {
+			t.Errorf("Location=%q want prefix %s", loc, wantPrefix)
+		}
+	case http.StatusNotFound:
+		// Data set doesn't exist locally. Acceptable when no dataSetID env
+		// var was provided.
+		t.Logf("addPieces 404 for dataSetID=%s (expected when no dataset exists)", dataSetID)
+	case http.StatusInternalServerError:
+		t.Errorf("addPieces returned 500: body=%q", string(rbody))
+	default:
+		// 4xx with a meaningful error is fine — the SP validated the body
+		// shape and rejected. 400 because extraData=0x00 fails the EIP-712
+		// recover check, or 404 because dataset doesn't exist, etc.
+		if resp.StatusCode >= 500 {
+			t.Errorf("addPieces: status=%d (body=%q)", resp.StatusCode, string(rbody))
+		}
+	}
+}
+
+// TestCreateAndAddPiecesCompat: SDK create-dataset-add-pieces.ts hits
+// POST /pdp/data-sets/create-and-add. Combined flow: creates a dataset
+// AND adds pieces in one on-chain tx. Same response shape as
+// createDataSet (201 + Location: /pdp/data-sets/created/{txHash}).
+func TestCreateAndAddPiecesCompat(t *testing.T) {
+	requireOnChain(t)
+	base := baseURL(t)
+
+	body, _ := json.Marshal(map[string]any{
+		"recordKeeper": fwssAddressForBase(),
+		"extraData":    "0x00",
+		"pieces": []map[string]any{
+			{
+				"pieceCid": knownGoodPieceCIDv2,
+				"subPieces": []map[string]string{
+					{"subPieceCid": knownGoodPieceCIDv2},
+				},
+			},
+		},
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/pdp/data-sets/create-and-add", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /pdp/data-sets/create-and-add: %v", err)
+	}
+	defer resp.Body.Close()
+	rbody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusInternalServerError {
+		t.Errorf("createDataSetAndAddPieces returned 500: body=%q", string(rbody))
+		return
+	}
+	if resp.StatusCode >= 500 {
+		t.Errorf("createDataSetAndAddPieces: status=%d (body=%q)", resp.StatusCode, string(rbody))
+	}
+}
+
+// ---------- Route surface smoke ------------------------------------
+
 // TestRouteSurfaceSmoke: enumerates every route the SDK touches and
 // asserts NONE return 500 on baseline (well-formed but unknown-id)
 // requests. The point isn't to assert positive functionality; it's to

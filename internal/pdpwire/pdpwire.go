@@ -27,6 +27,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	upstreampdp "github.com/filecoin-project/curio/pdp"
+	pdpcontract "github.com/filecoin-project/curio/pdp/contract"
 	"github.com/filecoin-project/curio/lib/chainsched"
 	"github.com/filecoin-project/curio/lib/ethchain"
 	curiopaths "github.com/filecoin-project/curio/lib/paths"
@@ -91,6 +92,11 @@ type ChainDeps struct {
 	// goroutine that drives Run(ctx).
 	ChainSched *chainsched.CurioChainSched
 
+	// Network is the on-chain network the deps target. Threaded into
+	// every task constructor that resolves a contract address; also
+	// applied to the PDPService via SetNetwork during Mount.
+	Network pdpcontract.Network
+
 	// Close releases all transport state. Caller defers this for the
 	// process lifetime.
 	Close func()
@@ -109,6 +115,16 @@ func BuildChainDeps(ctx context.Context, db harmonyquery.DBInterface, lantern *l
 	if lantern == nil {
 		return nil, nil
 	}
+
+	// Derive the on-chain network from the embedded Lantern's runtime
+	// config (mainnet | calibration), not from the build-tag-selected
+	// constants in upstream curio's pdp/contract package. Without this
+	// thread, every contract address (PDPVerifier, FWSService, USDFC,
+	// ServiceProviderRegistry) resolves to mainnet at runtime even when
+	// the daemon is running with --network calibration. See
+	// Reiers/curio@5eb27b0 for the upstream-side refactor that made
+	// these network-aware functions available.
+	network := pdpNetworkFromLantern(lantern)
 
 	var closeFns []func()
 	closer := func() {
@@ -132,7 +148,7 @@ func BuildChainDeps(ctx context.Context, db harmonyquery.DBInterface, lantern *l
 
 	senderEth, sendTask := message.NewSenderETH(ethC, db)
 
-	chainSync := pdpv0.NewTaskChainSync(db, ethC, senderEth)
+	chainSync := pdpv0.NewTaskChainSync(db, ethC, senderEth, network)
 
 	// CurioChainSched: drive a Lotus-style tipset event loop. Lantern's
 	// embedded JSON-RPC server is HTTP POST (no WebSocket, no streaming
@@ -154,9 +170,9 @@ func BuildChainDeps(ctx context.Context, db harmonyquery.DBInterface, lantern *l
 		return nil, fmt.Errorf("build embedded chainsched node api: %w", err)
 	}
 	sched := chainsched.New(nodeForSched)
-	pdpv0.NewDataSetWatch(db, ethC, sched)
-	pdpv0.NewTerminateServiceWatcher(db, ethC, sched)
-	pdpv0.NewDataSetDeleteWatcher(db, ethC, sched)
+	pdpv0.NewDataSetWatch(db, ethC, sched, network)
+	pdpv0.NewTerminateServiceWatcher(db, ethC, sched, network)
+	pdpv0.NewDataSetDeleteWatcher(db, ethC, sched, network)
 
 	return &ChainDeps{
 		NodeAPI:     nodeC.FullNode(),
@@ -165,8 +181,24 @@ func BuildChainDeps(ctx context.Context, db harmonyquery.DBInterface, lantern *l
 		SendTaskETH: sendTask,
 		ChainSync:   chainSync,
 		ChainSched:  sched,
+		Network:     network,
 		Close:       closer,
 	}, nil
+}
+
+// pdpNetworkFromLantern maps the Lantern daemon's runtime network string
+// ("mainnet" | "calibration") to the pdp/contract.Network constants
+// upstream uses internally. Falls back to mainnet for unknown values
+// (matches the upstream build-tag default).
+func pdpNetworkFromLantern(d *lanterndaemon.Daemon) pdpcontract.Network {
+	switch d.Config().Network {
+	case "calibration":
+		return pdpcontract.NetworkCalibration
+	case "mainnet":
+		return pdpcontract.NetworkMainnet
+	default:
+		return pdpcontract.NetworkMainnet
+	}
 }
 
 // Mount builds the PDPService and mounts its routes onto r. Pass deps
@@ -198,6 +230,13 @@ func Mount(ctx context.Context, r *chi.Mux, db harmonyquery.DBInterface, stashDi
 		nil,       // *alertmanager.AlertTask — handlePing nil-checks this
 		nil,       // *ipni_provider.Provider — TODO: minimal IPNI publisher
 	)
+	// Override the build-tag-resolved network (which would default to
+	// mainnet for a tagless curio-core build) with the runtime network
+	// from the embedded Lantern config. SetNetwork propagates to the
+	// pull handler + eth_call validator too.
+	if deps != nil && deps.Network != "" {
+		svc.SetNetwork(deps.Network)
+	}
 	upstreampdp.Routes(r, svc)
 	return svc, nil
 }
