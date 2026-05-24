@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strconv"
 
 	"github.com/curiostorage/harmonyquery"
 	"github.com/ethereum/go-ethereum/common"
@@ -20,6 +21,7 @@ import (
 	"github.com/filecoin-project/curio/tasks/message"
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Reiers/curio-core/internal/alerts"
 	"github.com/Reiers/curio-core/internal/ethkeys"
 )
 
@@ -28,7 +30,70 @@ func Routes(r *chi.Mux, db harmonyquery.DBInterface, sender *message.SenderETH) 
 	r.Route("/admin", func(r chi.Router) {
 		r.Post("/test-tx", testTxHandler(db, sender))
 		r.Get("/eth-key", ethKeyHandler(db))
+
+		// Alerts (Reiers/curio-core#48). GET lists recent alerts (newest first);
+		// query params: ?limit=N (default 100), ?unacked=1 to filter acked rows.
+		// POST /admin/alerts/{id}/ack marks an alert acked.
+		r.Get("/alerts", alertsListHandler(db))
+		r.Get("/alerts/counts", alertsCountsHandler(db))
+		r.Post("/alerts/{id}/ack", alertsAckHandler(db))
 	})
+}
+
+func alertsListHandler(db harmonyquery.DBInterface) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit := 100
+		if v := r.URL.Query().Get("limit"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
+				limit = n
+			}
+		}
+		onlyUnacked := r.URL.Query().Get("unacked") == "1"
+
+		rows, err := alerts.Recent(r.Context(), db, limit, onlyUnacked)
+		if err != nil {
+			http.Error(w, "alerts.Recent: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"alerts": rows,
+			"count":  len(rows),
+		})
+	}
+}
+
+func alertsCountsHandler(db harmonyquery.DBInterface) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		counts, err := alerts.CountsOf(r.Context(), db)
+		if err != nil {
+			http.Error(w, "alerts.CountsOf: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(counts)
+	}
+}
+
+func alertsAckHandler(db harmonyquery.DBInterface) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		idStr := chi.URLParam(r, "id")
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil || id <= 0 {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		n, err := alerts.Ack(r.Context(), db, id)
+		if err != nil {
+			http.Error(w, "alerts.Ack: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":      id,
+			"changed": n,
+		})
+	}
 }
 
 // testTxHandler triggers a 1-wei self-transfer through SenderETH so

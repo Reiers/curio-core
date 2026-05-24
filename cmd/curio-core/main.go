@@ -34,6 +34,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Reiers/curio-core/internal/admin"
+	"github.com/Reiers/curio-core/internal/alerts"
 	"github.com/Reiers/curio-core/internal/config"
 	"github.com/Reiers/curio-core/internal/engine"
 	"github.com/Reiers/curio-core/internal/ethkeys"
@@ -476,6 +477,18 @@ Flags:
 		}
 		fmt.Printf("  msg-watch: message_waits_eth pending-tx poller active\n")
 	}
+
+	// Alerts (Reiers/curio-core#48): start the harmony_task_history poller
+	// that translates task failures into deduped alerts at /admin/alerts.
+	// Polls every 30s; bounded work per tick. Best-effort, non-blocking on
+	// the main lifecycle.
+	alertsPoller := alerts.NewPoller(eng.DB(), 30*time.Second)
+	go func() {
+		if err := alertsPoller.Run(rootCtx); err != nil && !errors.Is(err, context.Canceled) {
+			fmt.Printf("  alerts: poller exited with error: %v\n", err)
+		}
+	}()
+	fmt.Printf("  alerts:   /admin/alerts active (task-history poller, 30s interval)\n")
 
 	// --- HTTP server ---
 	// curio-core composes two route sets under one listener:
