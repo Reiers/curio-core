@@ -41,8 +41,16 @@ func (d *DB) ExecCount(ctx context.Context, query string, args ...any) (int, err
 	return int(n), nil
 }
 
-// Select reads rows into a slice of struct pointers via reflection +
-// `db:"..."` tag binding. Mirrors harmonyquery.Select.
+// Select reads rows into either:
+//   - a slice of struct pointers / slice of structs, via reflection +
+//     `db:"..."` tag binding (mirrors harmonyquery.Select); or
+//   - a slice of scalars (int64, TaskID-style typed int64, string, etc.)
+//     for single-column SELECT/UPDATE...RETURNING queries.
+//
+// The scalar shape is what task_type_handler.go's task-accept claim path
+// expects: `RETURNING id` into `*[]TaskID`. harmonyquery's pgx-backed
+// Select handles both shapes via dbscan; we reproduce the same surface
+// here for the hand-rolled reflector path.
 func (d *DB) Select(ctx context.Context, sliceOfStructPtr any, query string, args ...any) error {
 	rv := reflect.ValueOf(sliceOfStructPtr)
 	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Slice {
@@ -56,9 +64,6 @@ func (d *DB) Select(ctx context.Context, sliceOfStructPtr any, query string, arg
 	if isPtrElem {
 		structType = elemType.Elem()
 	}
-	if structType.Kind() != reflect.Struct {
-		return errors.New("Select: slice element must be struct or pointer to struct")
-	}
 
 	rows, err := d.sql.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -69,6 +74,25 @@ func (d *DB) Select(ctx context.Context, sliceOfStructPtr any, query string, arg
 	cols, err := rows.Columns()
 	if err != nil {
 		return err
+	}
+
+	// Scalar-slice shape: dst is *[]T where T is a non-struct kind. We
+	// require exactly one selected column.
+	if structType.Kind() != reflect.Struct {
+		if isPtrElem {
+			return errors.New("Select: slice of pointer to scalar not supported; use *[]T instead of *[]*T")
+		}
+		if len(cols) != 1 {
+			return fmt.Errorf("Select: scalar-slice destination requires exactly 1 column, got %d (%v)", len(cols), cols)
+		}
+		for rows.Next() {
+			elem := reflect.New(elemType).Elem()
+			if err := scanWithTimeFix(rows.Scan, elem.Addr().Interface()); err != nil {
+				return fmt.Errorf("scan scalar row: %w", err)
+			}
+			sliceVal.Set(reflect.Append(sliceVal, elem))
+		}
+		return rows.Err()
 	}
 
 	// Pre-compute column-to-field map via db tags.

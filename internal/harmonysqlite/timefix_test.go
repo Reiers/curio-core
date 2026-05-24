@@ -2,6 +2,7 @@ package harmonysqlite
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,5 +140,86 @@ func TestTimeFix_QueryRowI(t *testing.T) {
 	}
 	if got.IsZero() {
 		t.Errorf("QueryRowI: scanned zero time")
+	}
+}
+
+// TaskIDScalar mirrors upstream harmonytask.TaskID — a typed int64.
+// The scalar-slice path must work for typed scalars, not just bare ints.
+type TaskIDScalar int64
+
+func TestSelect_ScalarSlice_Int64(t *testing.T) {
+	db, err := Open(Config{Path: ":memory:"})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	if _, err := db.ExecCount(ctx, `CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)`); err != nil {
+		t.Fatalf("CREATE: %v", err)
+	}
+	if _, err := db.ExecCount(ctx, `INSERT INTO t (name) VALUES ('a'), ('b'), ('c')`); err != nil {
+		t.Fatalf("INSERT: %v", err)
+	}
+
+	var ids []int64
+	if err := db.Select(ctx, &ids, `SELECT id FROM t ORDER BY id`); err != nil {
+		t.Fatalf("Select int64: %v", err)
+	}
+	if len(ids) != 3 || ids[0] != 1 || ids[2] != 3 {
+		t.Errorf("Select int64: got %v, want [1 2 3]", ids)
+	}
+}
+
+func TestSelect_ScalarSlice_TypedInt64(t *testing.T) {
+	db, err := Open(Config{Path: ":memory:"})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	if _, err := db.ExecCount(ctx, `CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT)`); err != nil {
+		t.Fatalf("CREATE: %v", err)
+	}
+	if _, err := db.ExecCount(ctx, `INSERT INTO t DEFAULT VALUES`); err != nil {
+		t.Fatalf("INSERT: %v", err)
+	}
+	if _, err := db.ExecCount(ctx, `INSERT INTO t DEFAULT VALUES`); err != nil {
+		t.Fatalf("INSERT 2: %v", err)
+	}
+
+	// This mirrors task_type_handler.go:181's *[]TaskID destination.
+	var ids []TaskIDScalar
+	if err := db.Select(ctx, &ids, `SELECT id FROM t ORDER BY id`); err != nil {
+		t.Fatalf("Select TaskIDScalar: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != 1 || ids[1] != 2 {
+		t.Errorf("Select TaskIDScalar: got %v, want [1 2]", ids)
+	}
+}
+
+func TestSelect_ScalarSlice_RejectsMultiColumn(t *testing.T) {
+	db, err := Open(Config{Path: ":memory:"})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	if _, err := db.ExecCount(ctx, `CREATE TABLE t (a INTEGER, b INTEGER)`); err != nil {
+		t.Fatalf("CREATE: %v", err)
+	}
+	if _, err := db.ExecCount(ctx, `INSERT INTO t (a, b) VALUES (1, 2)`); err != nil {
+		t.Fatalf("INSERT: %v", err)
+	}
+
+	var ids []int64
+	err = db.Select(ctx, &ids, `SELECT a, b FROM t`)
+	if err == nil {
+		t.Fatal("expected error on scalar-slice with 2 columns")
+	}
+	if !strings.Contains(err.Error(), "exactly 1 column") {
+		t.Errorf("expected 'exactly 1 column' error, got: %v", err)
 	}
 }
