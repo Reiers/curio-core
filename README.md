@@ -206,7 +206,10 @@ curio-core run: starting daemon
   lantern:  rpc at http://127.0.0.1:39055/rpc/v1 (in-process)
   lantern:  vm-bridge -> https://api.calibration.node.glif.io/rpc/v1
   eth_keys: 0x6b4758baAcE34519F4977A30f6bEcd473249833c (role=pdp)
-  engine:   9 task types registered
+  engine:   8 live task impls, 9 descriptor entries
+  watchers: pdpv0 dataset/terminate/delete handlers wired on tipset sub
+  parkcomplete: streaming-upload -> parked_pieces.complete bridge active
+  msg-watch: message_waits_eth pending-tx poller active
   pdp:      /pdp/* routes mounted (stash /home/op/.curio-core/stash)
   admin:    /admin/test-tx, /admin/eth-key mounted (loopback)
   webui:    http://127.0.0.1:14994/

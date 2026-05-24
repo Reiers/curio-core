@@ -445,7 +445,16 @@ Flags:
 		_ = eng.Stop()
 		return fmt.Errorf("engine.Start: %w", err)
 	}
-	fmt.Printf("  engine:   %d task types registered\n", eng.Registry().Len())
+	// extraTasks holds the live TaskInterface implementations we threaded
+	// in alongside the built-in PDPNotify task. Total live impls = 1 +
+	// len(extraTasks). The Registry().Len() value below is the count of
+	// static TaskTypeDetails descriptors curio-core knows about (the
+	// PDPv0 task surface), which is a different number from the live
+	// impls because not every descriptor has an active impl in every
+	// deployment (e.g. PullPiece is on the descriptor list but not wired).
+	liveImpls := 1 + len(extraTasks)
+	fmt.Printf("  engine:   %d live task impls, %d descriptor entries\n",
+		liveImpls, eng.Registry().Len())
 	if chainDeps != nil && chainDeps.ChainSched != nil {
 		fmt.Printf("  watchers: pdpv0 dataset/terminate/delete handlers wired on tipset sub\n")
 	}

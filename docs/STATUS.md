@@ -35,7 +35,7 @@ The "drive a real PDP proof through the loop" workstream is most of the way thro
 - **P3.1 - `internal/parkcomplete` task** (d895436). Streaming-upload → `parked_pieces.complete` bridge, 11 unit tests. Closes the gap between the diskstash piece-upload path and the harmonytask piece-park lifecycle.
 - **P3.2 - `internal/localpiecepark.Reader`** (69581fd). `pieceprovider.PieceParkBackend` implementation over diskstash, 9 unit tests.
 - **P3.3 - cachedreader construction in curio-core** (69581fd). Confirmed `sectorReader == nil` is safe in the cachedreader code path under the pdpv0-only profile.
-- **P4 - ProveTask + InitProvingPeriodTask + NextProvingPeriodTask + SaveCache wired** (69581fd). All four proving-cycle tasks live in `pdpwire.BuildChainDeps` + `main.go` extraTasks; harmonytask registry now holds the full PDPv0 proving pipeline (13 task types).
+- **P4 - ProveTask + InitProvingPeriodTask + NextProvingPeriodTask + SaveCache wired** (69581fd). All four proving-cycle tasks live in `pdpwire.BuildChainDeps` + `main.go` extraTasks. Boot announces `8 live task impls, 9 descriptor entries` (the impl count is PDPNotify + extraTasks; descriptors are the static PDPv0 surface in `BuildTaskRegistry`). Tipset handlers (DataSetWatch, TerminateServiceWatcher, DataSetDeleteWatcher, LifecycleSweeper, MessageWatcherEth) are additional and not counted as task impls.
 - **P5 - end-to-end signed-`extraData` synapse-sdk flow** - substantially DRIVEN; awaiting proof window. Today's chain of events on calibration:
 
   | Step | Tx hash | Block | Result |
