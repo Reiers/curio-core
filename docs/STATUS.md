@@ -2,7 +2,7 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-24 18:15 CEST** (Day 8 + #56 P5 (PROOF LANDED) + #57 + #58 + #59 + #61 + #4 closed; schema 0017 audit cleanup applied; daemon healthy on calibration; proof loop self-sustaining; awaiting second prove cycle at epoch 3,743,940.)
+Last updated: **2026-05-24 18:55 CEST** (Day 8 + #56 P5 (PROOF LANDED) + #57 + #58 + #59 + #61 + #4 closed; schema 0017 audit cleanup applied; boot log fixed to distinguish live impls from descriptors; upstream curio PR#1250 opened for CanAccept silent-rejection WARN; daemon healthy on calibration; proof loop self-sustaining; awaiting second prove cycle at epoch 3,743,940.)
 
 ## 🏆 PROOF LOOP LIVE
 
