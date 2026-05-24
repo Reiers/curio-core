@@ -86,7 +86,7 @@ Common flags:
 
 Contracts (FilOzone ServiceProviderRegistry):
   calibration: 0x839e5c9988e4e9977d40708d0094103c0839Ac9D
-  mainnet:     (not yet deployed)
+  mainnet:     0xf55dDbf63F1b55c3F1D4FA7e339a68AB7b64A5eB
 `)
 }
 
@@ -375,10 +375,16 @@ func bigEndianUint(v uint64) []byte {
 
 // --- helpers ---------------------------------------------------------
 
+// spRegistryAddressFor returns the ServiceProviderRegistry proxy address
+// for the given network. Source: FilOzone/filecoin-services
+// service_contracts/deployments.json (commit ed85348e, chain IDs 314 +
+// 314159).
 func spRegistryAddressFor(network string) (common.Address, bool) {
 	switch network {
 	case "calibration":
 		return common.HexToAddress("0x839e5c9988e4e9977d40708d0094103c0839Ac9D"), true
+	case "mainnet":
+		return common.HexToAddress("0xf55dDbf63F1b55c3F1D4FA7e339a68AB7b64A5eB"), true
 	}
 	return common.Address{}, false
 }
