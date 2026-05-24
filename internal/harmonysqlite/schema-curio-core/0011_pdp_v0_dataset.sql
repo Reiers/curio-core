@@ -233,3 +233,41 @@ CREATE TABLE IF NOT EXISTS filecoin_payment_transactions (
     tx_hash  TEXT PRIMARY KEY,
     rail_ids TEXT NOT NULL DEFAULT '[]'                    -- JSON array of bigints
 );
+
+-- Maintenance trigger: propagate message_waits_eth pending → confirmed/failed
+-- into pdp_data_set_creates.ok. Upstream PG function:
+--   update_pdp_data_set_creates() in 20250730-pdp-v0-rename.sql.
+-- Mirror of pdp_proofset_create_message_status_change in 0010 for the
+-- v1 names; needed for the dataset_watch handler to advance rows past
+-- the `ok IS NULL` guard in processPendingDataSetCreates.
+CREATE TRIGGER IF NOT EXISTS pdp_data_set_create_message_status_change
+AFTER UPDATE OF tx_status, tx_success ON message_waits_eth
+WHEN OLD.tx_status = 'pending'
+   AND (NEW.tx_status = 'confirmed' OR NEW.tx_status = 'failed')
+BEGIN
+    UPDATE pdp_data_set_creates
+       SET ok = CASE
+                  WHEN NEW.tx_status = 'failed' OR NEW.tx_success = 0 THEN 0
+                  WHEN NEW.tx_status = 'confirmed' AND NEW.tx_success = 1 THEN 1
+                  ELSE ok
+                END
+     WHERE create_message_hash = NEW.signed_tx_hash
+       AND data_set_created = 0;
+END;
+
+-- Same pattern for pdp_data_set_piece_adds.add_message_ok, used by the
+-- addPieces flow. Upstream PG function: update_pdp_data_set_piece_adds()
+-- in 20250730-pdp-v0-rename.sql.
+CREATE TRIGGER IF NOT EXISTS pdp_data_set_add_message_status_change
+AFTER UPDATE OF tx_status, tx_success ON message_waits_eth
+WHEN OLD.tx_status = 'pending'
+   AND (NEW.tx_status = 'confirmed' OR NEW.tx_status = 'failed')
+BEGIN
+    UPDATE pdp_data_set_piece_adds
+       SET add_message_ok = CASE
+                  WHEN NEW.tx_status = 'failed' OR NEW.tx_success = 0 THEN 0
+                  WHEN NEW.tx_status = 'confirmed' AND NEW.tx_success = 1 THEN 1
+                  ELSE add_message_ok
+                END
+     WHERE add_message_hash = NEW.signed_tx_hash;
+END;

@@ -451,6 +451,23 @@ Flags:
 	}
 	fmt.Printf("  parkcomplete: streaming-upload -> parked_pieces.complete bridge active (stash=%s)\n", stashDir)
 
+	// Wire MessageWatcherEth: polls message_waits_eth rows in 'pending'
+	// state, fetches their receipt via eth_getTransactionReceipt through
+	// the embedded Lantern VMBridge, and UPDATEs tx_status='confirmed' +
+	// tx_success + tx_receipt. Required for the pdpv0 dataset_watch /
+	// terminate / delete handlers to advance past `ok IS NULL` rows.
+	//
+	// Constructed AFTER engine.Start because NewMessageWatcherEth takes
+	// a *harmonytask.TaskEngine reference to assign work to itself, and
+	// the engine must be running to accept assignments.
+	if chainDeps != nil && chainDeps.ChainSched != nil && chainDeps.EthClient != nil {
+		if _, err := message.NewMessageWatcherEth(eng.DB(), eng.TaskEngine(), chainDeps.ChainSched, chainDeps.EthClient); err != nil {
+			_ = eng.Stop()
+			return fmt.Errorf("NewMessageWatcherEth: %w", err)
+		}
+		fmt.Printf("  msg-watch: message_waits_eth pending-tx poller active\n")
+	}
+
 	// --- HTTP server ---
 	// curio-core composes two route sets under one listener:
 	//   /pdp/*  — upstream curio/pdp HTTP API (synapse-sdk speaks this)

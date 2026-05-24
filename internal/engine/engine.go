@@ -166,6 +166,12 @@ func New(ctx context.Context, cfg Config) (*Engine, error) {
 // setup webui) without re-opening the file.
 func (e *Engine) DB() *harmonysqlite.DB { return e.db }
 
+// TaskEngine returns the underlying harmonytask.TaskEngine after Start().
+// Returns nil before Start() is called. Used by main.go to construct
+// runtime watchers (e.g. message.MessageWatcherEth) that need to assign
+// work to the running engine.
+func (e *Engine) TaskEngine() *harmonytask.TaskEngine { return e.te }
+
 // Registry returns the immutable task registry built at New() time.
 func (e *Engine) Registry() *TaskRegistry { return e.registry }
 

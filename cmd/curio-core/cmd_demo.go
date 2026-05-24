@@ -78,6 +78,8 @@ func cmdDemo(args []string) error {
 	switch args[0] {
 	case "create-dataset":
 		return cmdDemoCreateDataSet(args[1:])
+	case "prepare-client-payments":
+		return cmdDemoPrepareClientPayments(args[1:])
 	case "-h", "--help", "help":
 		demoUsage()
 		return nil
