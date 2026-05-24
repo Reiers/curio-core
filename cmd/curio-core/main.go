@@ -394,11 +394,22 @@ Flags:
 	if chainDeps != nil && chainDeps.ChainSync != nil {
 		extraTasks = append(extraTasks, chainDeps.ChainSync)
 	}
+	// Install the tipset-subscription scheduler BEFORE engine.Start.
+	// BuildChainDeps already registered the three pdpv0 watcher
+	// handlers on it (DataSetWatch, TerminateServiceWatcher,
+	// DataSetDeleteWatcher); the engine takes ownership of Run() +
+	// shutdown cancellation.
+	if chainDeps != nil && chainDeps.ChainSched != nil {
+		eng.SetChainSched(chainDeps.ChainSched)
+	}
 	if err := eng.Start(rootCtx, extraTasks...); err != nil {
 		_ = eng.Stop()
 		return fmt.Errorf("engine.Start: %w", err)
 	}
 	fmt.Printf("  engine:   %d task types registered\n", eng.Registry().Len())
+	if chainDeps != nil && chainDeps.ChainSched != nil {
+		fmt.Printf("  watchers: pdpv0 dataset/terminate/delete handlers wired on tipset sub\n")
+	}
 
 	// --- HTTP server ---
 	// curio-core composes two route sets under one listener:

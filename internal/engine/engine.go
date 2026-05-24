@@ -38,10 +38,12 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/filecoin-project/curio/harmony/harmonytask"
 	"github.com/filecoin-project/curio/harmony/resources"
 	"github.com/filecoin-project/curio/harmony/taskhelp"
+	"github.com/filecoin-project/curio/lib/chainsched"
 	"github.com/filecoin-project/curio/tasks/pdpv0"
 	"github.com/filecoin-project/curio/tasks/tasknames"
 
@@ -87,11 +89,31 @@ type Engine struct {
 	// drained in Stop. nil outside the running window.
 	te *harmonytask.TaskEngine
 
+	// chainSched is the tipset-subscription event loop the pdpv0
+	// watcher tasks attach to. SetChainSched installs it before
+	// Start so the engine takes ownership of Run() + cancel-on-Stop.
+	// Optional: nil disables the watcher event loop (Day 7 mode).
+	chainSched       *chainsched.CurioChainSched
+	chainSchedCancel context.CancelFunc
+	chainSchedDone   chan struct{}
+
 	startedAt atomic.Value // time.Time, optional, zero until Start()
 	running   atomic.Bool
 
 	mu      sync.Mutex
 	stopErr error
+}
+
+// SetChainSched installs the tipset-subscription scheduler. The engine
+// takes ownership of its Run() goroutine on Start and cancels it on
+// Stop. Must be called BEFORE Start; subsequent calls panic.
+//
+// Pass nil to opt out of watcher dispatch (default).
+func (e *Engine) SetChainSched(sched *chainsched.CurioChainSched) {
+	if e.running.Load() {
+		panic("engine: SetChainSched after Start")
+	}
+	e.chainSched = sched
 }
 
 // New opens the SQLite state DB (applying migrations) and builds the
@@ -211,6 +233,20 @@ func (e *Engine) Start(ctx context.Context, extraTasks ...harmonytask.TaskInterf
 	}
 	e.te = te
 
+	// Start the tipset-subscription event loop if SetChainSched was
+	// called pre-Start. chainsched.Run blocks until ctx is cancelled,
+	// so we own it in a goroutine. Stop cancels its context and waits
+	// on chainSchedDone.
+	if e.chainSched != nil {
+		schedCtx, cancel := context.WithCancel(context.Background())
+		e.chainSchedCancel = cancel
+		e.chainSchedDone = make(chan struct{})
+		go func() {
+			defer close(e.chainSchedDone)
+			e.chainSched.Run(schedCtx)
+		}()
+	}
+
 	return nil
 }
 
@@ -274,6 +310,22 @@ func (e *Engine) Stop() error {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	// Cancel the chainsched first so its Run loop unwinds while the
+	// harmonytask scheduler is still alive to absorb any in-flight
+	// handler calls. Bounded wait so a wedged subscription can't
+	// stall Stop indefinitely.
+	if e.chainSchedCancel != nil {
+		e.chainSchedCancel()
+		select {
+		case <-e.chainSchedDone:
+		case <-time.After(5 * time.Second):
+			// log + carry on; the goroutine leaks at process exit time
+		}
+		e.chainSchedCancel = nil
+		e.chainSchedDone = nil
+	}
+
 	if e.te != nil {
 		e.te.GracefullyTerminate()
 		e.te = nil

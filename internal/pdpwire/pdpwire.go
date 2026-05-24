@@ -21,11 +21,13 @@ package pdpwire
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	upstreampdp "github.com/filecoin-project/curio/pdp"
+	"github.com/filecoin-project/curio/lib/chainsched"
 	"github.com/filecoin-project/curio/lib/ethchain"
 	curiopaths "github.com/filecoin-project/curio/lib/paths"
 	"github.com/filecoin-project/curio/tasks/message"
@@ -79,6 +81,16 @@ type ChainDeps struct {
 	// task ids; marking finalized state).
 	ChainSync *pdpv0.TaskChainSync
 
+	// ChainSched drives the tipset-subscription event loop that the
+	// pdpv0 watcher tasks (DataSetWatch, TerminateServiceWatcher,
+	// DataSetDeleteWatcher) hook into via AddHandler. Run() must be
+	// invoked AFTER all handlers are registered, exactly once.
+	//
+	// BuildChainDeps registers the three watcher handlers and returns
+	// the scheduler ready-to-run; the engine takes ownership of the
+	// goroutine that drives Run(ctx).
+	ChainSched *chainsched.CurioChainSched
+
 	// Close releases all transport state. Caller defers this for the
 	// process lifetime.
 	Close func()
@@ -122,12 +134,37 @@ func BuildChainDeps(ctx context.Context, db harmonyquery.DBInterface, lantern *l
 
 	chainSync := pdpv0.NewTaskChainSync(db, ethC, senderEth)
 
+	// CurioChainSched: drive a Lotus-style tipset event loop. Lantern's
+	// embedded JSON-RPC server is HTTP POST (no WebSocket, no streaming
+	// channels), so calling Filecoin.ChainNotify through the standard
+	// lotusclient errors with 'method not supported in this mode (no
+	// out channel support)'. Lantern V1.5 wires an in-process head-
+	// change distributor (Daemon.HeadChanges) that bypasses the RPC
+	// transport layer; nodeapi.EmbeddedChainSchedNodeAPI bridges that
+	// to the lotus-typed surface chainsched expects.
+	//
+	// Register the three pdpv0 watcher handlers BEFORE the engine
+	// invokes Run() (chainsched.AddHandler rejects after start).
+	// Each watcher uses (db, ethClient, sched) and panics on its own
+	// AddHandler failure; we trust them not to fail because Run()
+	// hasn't been called yet.
+	nodeForSched, err := nodeapi.NewEmbeddedChainSchedNodeAPI(nodeC.FullNode(), lantern)
+	if err != nil {
+		closer()
+		return nil, fmt.Errorf("build embedded chainsched node api: %w", err)
+	}
+	sched := chainsched.New(nodeForSched)
+	pdpv0.NewDataSetWatch(db, ethC, sched)
+	pdpv0.NewTerminateServiceWatcher(db, ethC, sched)
+	pdpv0.NewDataSetDeleteWatcher(db, ethC, sched)
+
 	return &ChainDeps{
 		NodeAPI:     nodeC.FullNode(),
 		EthClient:   ethC,
 		SenderETH:   senderEth,
 		SendTaskETH: sendTask,
 		ChainSync:   chainSync,
+		ChainSched:  sched,
 		Close:       closer,
 	}, nil
 }
