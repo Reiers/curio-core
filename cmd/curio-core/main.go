@@ -83,6 +83,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "curio-core config: %v\n", err)
 			os.Exit(1)
 		}
+	case "demo":
+		if err := cmdDemo(args); err != nil {
+			fmt.Fprintf(os.Stderr, "curio-core demo: %v\n", err)
+			os.Exit(1)
+		}
 	case "version":
 		fmt.Println("curio-core 0.0.1-prealpha")
 	case "-h", "--help", "help":
@@ -105,6 +110,8 @@ Subcommands:
   wallet         operator wallet management (list, new, import, export, role, delete)
   doctor         read-only health + DB ↔ chain reconciliation report
   sp             SP registry operations (register, info)
+  config         headless config inspection + mutation
+  demo           synapse-sdk-shaped end-to-end demo flows (create-dataset)
   version        print version
   help           this message
 
