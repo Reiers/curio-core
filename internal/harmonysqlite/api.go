@@ -95,7 +95,7 @@ func (d *DB) Select(ctx context.Context, sliceOfStructPtr any, query string, arg
 			}
 			dests[i] = elem.Field(fi).Addr().Interface()
 		}
-		if err := rows.Scan(dests...); err != nil {
+		if err := scanWithTimeFix(rows.Scan, dests...); err != nil {
 			return fmt.Errorf("scan row: %w", err)
 		}
 		if isPtrElem {

@@ -48,11 +48,12 @@ func (d *DB) SelectI(ctx context.Context, sliceOfStructPtr any, sql harmonyquery
 	return d.Select(ctx, sliceOfStructPtr, string(sql), arguments...)
 }
 
-// QueryRowI implements harmonyquery.DBInterface.QueryRow. Returns a
-// harmonyquery.Row (interface with Scan(...any) error); *sql.Row
-// satisfies that interface naturally via its Scan method.
+// QueryRowI implements harmonyquery.DBInterface.QueryRow. Wraps the
+// underlying *sql.Row in rowFromSqlRow so per-column Scan calls route
+// through scanWithTimeFix (handles modernc.org/sqlite's TEXT-shaped
+// timestamps when the destination is *time.Time).
 func (d *DB) QueryRowI(ctx context.Context, sql harmonyquery.RawString, arguments ...any) harmonyquery.Row {
-	return d.QueryRow(ctx, string(sql), arguments...)
+	return rowFromSqlRow{r: d.QueryRow(ctx, string(sql), arguments...)}
 }
 
 // BeginTransactionI implements harmonyquery.DBInterface.BeginTransactionI.
@@ -89,10 +90,26 @@ func (s *sqliteTxI) SelectI(sliceOfStructPtr any, q harmonyquery.RawString, argu
 		return fmt.Errorf("harmonysqlite Tx.SelectI: query: %w", err)
 	}
 	defer rows.Close()
-	if err := dbscan.ScanAll(sliceOfStructPtr, rows); err != nil {
+	if err := dbscan.ScanAll(sliceOfStructPtr, &rowsWithTimeFix{Rows: rows}); err != nil {
 		return fmt.Errorf("harmonysqlite Tx.SelectI: scan: %w", err)
 	}
 	return nil
+}
+
+// rowsWithTimeFix wraps *sql.Rows so dbscan's per-row Scan call routes
+// through scanWithTimeFix, which handles modernc.org/sqlite's TEXT-shaped
+// timestamp columns when the destination is *time.Time. Every other
+// method (Close/Err/Next/Columns/NextResultSet) passes through unchanged.
+//
+// dbscan.Rows is a superset of *sql.Rows's public surface plus
+// NextResultSet, which sql.Rows also provides since Go 1.8 — the
+// embedded *sql.Rows satisfies the interface natively for those methods.
+type rowsWithTimeFix struct {
+	*sql.Rows
+}
+
+func (r *rowsWithTimeFix) Scan(dest ...any) error {
+	return scanWithTimeFix(r.Rows.Scan, dest...)
 }
 
 // SendBatch is pgx-specific batch protocol. Not supported on SQLite.
