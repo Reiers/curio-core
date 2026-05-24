@@ -126,24 +126,37 @@ CREATE TABLE IF NOT EXISTS pdp_piece_streaming_uploads (
 -- here to avoid duplicate definitions; both used IF NOT EXISTS so the
 -- duplication was harmless at runtime but confusing on inspection.
 
--- 20260109-pdp-v0-pull.sql
+-- 20260109-pdp-v0-pull.sql (faithful port of upstream's PG schema).
+-- Earlier port was a guess; this version matches upstream byte for byte
+-- so the GetPullByKey query (SELECT id, service, extra_data_hash,
+-- data_set_id, record_keeper FROM pdp_piece_pulls WHERE ...) resolves
+-- cleanly. Surfaced live during #56 P5 add-pieces smoke testing as
+-- 'no such column: service'.
 CREATE TABLE IF NOT EXISTS pdp_piece_pulls (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_url         TEXT NOT NULL,
-    expected_piece_cid TEXT,
-    expected_piece_size INTEGER,
-    state              TEXT NOT NULL DEFAULT 'pending',
-    created_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at       TEXT,
-    error              TEXT
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    service         TEXT NOT NULL
+                      REFERENCES pdp_services(service_label) ON DELETE CASCADE,
+    extra_data_hash BLOB NOT NULL,                              -- sha256(extraData), BYTEA -> BLOB
+    data_set_id     INTEGER NOT NULL DEFAULT 0,                 -- 0 = create new dataset
+    record_keeper   TEXT NOT NULL DEFAULT '',                   -- required when data_set_id = 0
+    created_at      TEXT DEFAULT CURRENT_TIMESTAMP,             -- TIMESTAMPTZ -> TEXT (UTC)
+
+    UNIQUE(service, extra_data_hash, data_set_id, record_keeper)
 );
 
 CREATE TABLE IF NOT EXISTS pdp_piece_pull_items (
-    pull_id   INTEGER NOT NULL REFERENCES pdp_piece_pulls(id) ON DELETE CASCADE,
-    piece_cid TEXT NOT NULL,
-    piece_ref INTEGER REFERENCES parked_piece_refs(ref_id) ON DELETE SET NULL,
-    PRIMARY KEY (pull_id, piece_cid)
+    fetch_id        INTEGER NOT NULL REFERENCES pdp_piece_pulls(id) ON DELETE CASCADE,
+    piece_cid       TEXT NOT NULL,                              -- PieceCIDv1 (joins with parked_pieces)
+    piece_raw_size  INTEGER NOT NULL,                           -- raw size for PieceCIDv2 reconstruction
+    source_url      TEXT NOT NULL,                              -- external SP URL to fetch from
+    task_id         INTEGER REFERENCES harmony_task(id) ON DELETE SET NULL,
+    failed          INTEGER NOT NULL DEFAULT 0,                 -- BOOLEAN -> INTEGER
+    fail_reason     TEXT,
+
+    PRIMARY KEY (fetch_id, piece_cid)
 );
+
+CREATE INDEX IF NOT EXISTS idx_pdp_piece_pulls_created_at ON pdp_piece_pulls(created_at);
 
 ----------------------------------------------------------------------------
 -- Maintenance triggers for pdp_piecerefs.data_set_refcount.
