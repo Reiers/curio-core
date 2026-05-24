@@ -2,7 +2,15 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-24 16:55 CEST** (Day 8 + #56 P5 + #57 + #58 + #59 + #61 + #4 all closed today; daemon running 0 ERROR / 0 WARN on calibration; awaiting proof window at ~17:47 CEST.)
+Last updated: **2026-05-24 18:05 CEST** (Day 8 + #56 P5 (PROOF LANDED) + #57 + #58 + #59 + #61 + #4 all closed today; daemon healthy on calibration; proof loop self-sustaining.)
+
+## 🏆 PROOF LOOP LIVE
+
+**Prove tx on calibration:** `0x8dae0bab765c7e0218ebe87be0fd5d2ef55f5e2f2a5010d2a36afd9d3ce1a02d` confirmed, tx_success=1.
+
+**Dataset 13977 state after proof:** `prev_challenge_request_epoch = 3,743,728` (the proof's challenge), `prove_at_epoch = 3,743,940` (next proving window scheduled by NextPP).
+
+The proof loop is self-sustaining: ProveTask -> SaveCache -> InitPP -> NextPP fires automatically every proving window. Randomness sourced from Lantern's locally-validated DRAND beacons (`StateGetRandomnessDigestFromBeacon` added in Lantern v1.5.2). No external RPC dependency for the proof seed.
 
 ## Day 8 status: COMPLETE
 
