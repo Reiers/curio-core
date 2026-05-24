@@ -42,28 +42,17 @@ import (
 
 	"github.com/ipfs/go-cid"
 
+	"github.com/filecoin-project/curio/market/indexstore"
+
 	"github.com/Reiers/curio-core/internal/harmonysqlite"
 )
 
-// NodeDigest mirrors upstream `market/indexstore.NodeDigest`. Local
-// definition keeps the package import-free aside from harmonysqlite +
-// go-cid, so the upstream interface refactor can wire either type via
-// the Backend interface in the fork.
-type NodeDigest struct {
-	Layer int      // Layer index in the Merkle tree
-	Index int64    // Logical leaf index at that layer
-	Hash  [32]byte // 32-byte digest at that node
-}
-
-// Record mirrors upstream `market/indexstore.Record`. Used only by the
-// aggregate-piece path (FindPieceInAggregate); pdpv0 deployments never
-// populate the underlying table.
-type Record struct {
-	PieceCid          cid.Cid
-	AggregatePieceCid cid.Cid
-	UnpaddedOffset    uint64
-	UnpaddedLength    uint64
-}
+// NodeDigest + Record types are aliased from upstream's market/indexstore.
+// The interface contract is defined upstream against those types; sharing
+// the aliases here means *Store satisfies indexstore.Backend without any
+// translation at the call site.
+type NodeDigest = indexstore.NodeDigest
+type Record = indexstore.Record
 
 // Store is the SQLite-backed indexstore implementation. Construct via
 // New. Methods are safe for concurrent use; the underlying SQLite
@@ -224,7 +213,7 @@ func (s *Store) RemoveIndexes(ctx context.Context, pieceCidV2 cid.Cid) error {
 // that populates the table works without code changes here.
 func (s *Store) FindPieceInAggregate(ctx context.Context, pieceCid cid.Cid) ([]Record, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT aggregate_piece_cid, piece_cid, unpadded_offset, unpadded_length
+		SELECT aggregate_piece_cid, unpadded_offset, unpadded_length
 		FROM piece_by_aggregate
 		WHERE piece_cid = ?
 		ORDER BY aggregate_piece_cid, unpadded_offset`,
@@ -237,25 +226,23 @@ func (s *Store) FindPieceInAggregate(ctx context.Context, pieceCid cid.Cid) ([]R
 	var out []Record
 	for rows.Next() {
 		var (
-			aggBytes, pieceBytes []byte
-			off, length          int64
+			aggBytes    []byte
+			off, length int64
 		)
-		if err := rows.Scan(&aggBytes, &pieceBytes, &off, &length); err != nil {
+		if err := rows.Scan(&aggBytes, &off, &length); err != nil {
 			return nil, fmt.Errorf("sqliteindex: FindPieceInAggregate scan: %w", err)
 		}
 		aggCid, _, err := decodePieceCid(aggBytes)
 		if err != nil {
 			return nil, fmt.Errorf("sqliteindex: FindPieceInAggregate aggregate cid: %w", err)
 		}
-		pCid, _, err := decodePieceCid(pieceBytes)
-		if err != nil {
-			return nil, fmt.Errorf("sqliteindex: FindPieceInAggregate piece cid: %w", err)
-		}
+		// Upstream Record shape: Cid + Offset + Size. The aggregate
+		// piece CID goes into Cid; offset + size describe where this
+		// piece sits within that aggregate.
 		out = append(out, Record{
-			AggregatePieceCid: aggCid,
-			PieceCid:          pCid,
-			UnpaddedOffset:    uint64(off),
-			UnpaddedLength:    uint64(length),
+			Cid:    aggCid,
+			Offset: uint64(off),
+			Size:   uint64(length),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -275,7 +262,8 @@ func decodePieceCid(b []byte) (cid.Cid, int, error) {
 	return c, n, nil
 }
 
-// Compile-time guard: package depends on bytes for an unused import-
-// suppression import; keeping the reference quiets lint without
-// affecting the runtime path.
+// Compile-time guards: package depends on bytes for an unused import-
+// suppression import; the runtime path doesn't reference it.
+// *Store satisfies indexstore.Backend (the contract defined upstream).
 var _ = bytes.NewReader
+var _ indexstore.Backend = (*Store)(nil)

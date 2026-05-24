@@ -28,6 +28,7 @@ import (
 
 	upstreampdp "github.com/filecoin-project/curio/pdp"
 	pdpcontract "github.com/filecoin-project/curio/pdp/contract"
+	"github.com/filecoin-project/curio/lib/cachedreader"
 	"github.com/filecoin-project/curio/lib/chainsched"
 	"github.com/filecoin-project/curio/lib/ethchain"
 	curiopaths "github.com/filecoin-project/curio/lib/paths"
@@ -40,7 +41,10 @@ import (
 
 	"github.com/Reiers/curio-core/internal/diskstash"
 	cethclient "github.com/Reiers/curio-core/internal/ethclient"
+	"github.com/Reiers/curio-core/internal/harmonysqlite"
+	"github.com/Reiers/curio-core/internal/localpiecepark"
 	"github.com/Reiers/curio-core/internal/nodeapi"
+	"github.com/Reiers/curio-core/internal/sqliteindex"
 )
 
 // Compile-time guards.
@@ -92,6 +96,38 @@ type ChainDeps struct {
 	// goroutine that drives Run(ctx).
 	ChainSched *chainsched.CurioChainSched
 
+	// IndexStore is the SQLite-backed pdp_cache_layer storage used by
+	// ProveTask + SaveCache. Built atop our harmonysqlite DB; nil only
+	// when BuildChainDeps was invoked without a non-nil db (a fast-fail
+	// path the lantern-less callers exercise, e.g. tests).
+	IndexStore *sqliteindex.Store
+
+	// PieceParkReader serves piece bytes from the diskstash to the
+	// cachedreader piece-park fallback path. Satisfies
+	// pieceprovider.PieceParkBackend; curio-core's substitute for
+	// upstream's cluster-aware *pieceprovider.PieceParkReader.
+	PieceParkReader *localpiecepark.Reader
+
+	// CachedPieceReader is the upstream cachedreader.CachedPieceReader
+	// constructed with (db, nil-sectorReader, ourPieceParkReader,
+	// ourIndexStore). Used by ProveTask + SaveCache.
+	CachedPieceReader *cachedreader.CachedPieceReader
+
+	// SaveCache is the upstream PDPv0 task that builds the Merkle layer
+	// cache (pdp_cache_layer) for completed pieces. Triggered on tipset
+	// apply via the chain scheduler.
+	SaveCache *pdpv0.TaskPDPSaveCache
+
+	// ProveTask is the upstream PDPv0 task that submits PDPVerifier
+	// challenge proofs on-chain via SenderETH.
+	ProveTask *pdpv0.ProveTask
+
+	// InitProvingPeriodTask + NextProvingPeriodTask manage the proving
+	// period state machine: setting up the first proving period for a
+	// new data set and advancing it after each successful proof.
+	InitProvingPeriodTask *pdpv0.InitProvingPeriodTask
+	NextProvingPeriodTask *pdpv0.NextProvingPeriodTask
+
 	// Network is the on-chain network the deps target. Threaded into
 	// every task constructor that resolves a contract address; also
 	// applied to the PDPService via SetNetwork during Mount.
@@ -111,10 +147,19 @@ type ChainDeps struct {
 // Returns nil ChainDeps + nil error when lantern is nil. The caller
 // is expected to check d != nil before threading SendTaskETH into the
 // engine.
-func BuildChainDeps(ctx context.Context, db harmonyquery.DBInterface, lantern *lanterndaemon.Daemon) (*ChainDeps, error) {
+// BuildChainDeps wires every Lantern-backed and pdpv0 task curio-core
+// runs. dbConcrete is the underlying *harmonysqlite.DB; stashDir is
+// the directory diskstash writes streaming-upload files into.
+//
+// Returns nil ChainDeps + nil error when lantern is nil. Caller must
+// check d != nil before threading the task fields into the engine.
+func BuildChainDeps(ctx context.Context, dbConcrete *harmonysqlite.DB, stashDir string, lantern *lanterndaemon.Daemon) (*ChainDeps, error) {
 	if lantern == nil {
 		return nil, nil
 	}
+	// db is the interface-typed view of the same handle; used by every
+	// upstream task constructor that takes harmonyquery.DBInterface.
+	db := harmonyquery.DBInterface(dbConcrete)
 
 	// Derive the on-chain network from the embedded Lantern's runtime
 	// config (mainnet | calibration), not from the build-tag-selected
@@ -174,15 +219,50 @@ func BuildChainDeps(ctx context.Context, db harmonyquery.DBInterface, lantern *l
 	pdpv0.NewTerminateServiceWatcher(db, ethC, sched, network)
 	pdpv0.NewDataSetDeleteWatcher(db, ethC, sched, network)
 
+	// The PDP proof loop: SaveCache builds Merkle layers, ProveTask
+	// submits possession proofs on-chain, InitPP + NextPP manage the
+	// proving-period state machine. All four take cachedreader +
+	// indexstore deps that curio-core ships via local-file substitutes
+	// for the upstream cluster-aware abstractions:
+	//
+	//   sqliteindex.Store          satisfies indexstore.Backend on the
+	//                              SQLite pdp_cache_layer table
+	//   localpiecepark.Reader      satisfies pieceprovider.PieceParkBackend
+	//                              over diskstash files
+	//   nil sectorReader           cold-storage path never exercised
+	//                              for pdpv0 hot-storage pieces
+	//
+	// The cachedreader's GetSharedPieceReader call chain:
+	//   getPieceReaderFromAggregate -> sqliteindex (returns empty;
+	//                                  pdpv0 has no aggregates)
+	//   getPieceReaderFromMarketPieceDeal -> deals query (empty for pdpv0)
+	//                                        -> getPieceReaderFromPiecePark
+	//                                        -> localpiecepark.ReadPiece
+	idxStore := sqliteindex.New(dbConcrete)
+	ppr := localpiecepark.New(dbConcrete, stashDir)
+	cpr := cachedreader.NewCachedPieceReader(db, nil /* sectorReader */, ppr, idxStore)
+
+	saveCache := pdpv0.NewTaskPDPSaveCache(db, cpr, idxStore)
+	initPP := pdpv0.NewInitProvingPeriodTask(db, ethC, nodeC.FullNode(), sched, senderEth, network)
+	nextPP := pdpv0.NewNextProvingPeriodTask(db, ethC, nodeC.FullNode(), sched, senderEth, network)
+	proveTask := pdpv0.NewProveTask(sched, db, ethC, nodeC.FullNode(), senderEth, cpr, idxStore, network)
+
 	return &ChainDeps{
-		NodeAPI:     nodeC.FullNode(),
-		EthClient:   ethC,
-		SenderETH:   senderEth,
-		SendTaskETH: sendTask,
-		ChainSync:   chainSync,
-		ChainSched:  sched,
-		Network:     network,
-		Close:       closer,
+		NodeAPI:               nodeC.FullNode(),
+		EthClient:             ethC,
+		SenderETH:             senderEth,
+		SendTaskETH:           sendTask,
+		ChainSync:             chainSync,
+		ChainSched:            sched,
+		IndexStore:            idxStore,
+		PieceParkReader:       ppr,
+		CachedPieceReader:     cpr,
+		SaveCache:             saveCache,
+		ProveTask:             proveTask,
+		InitProvingPeriodTask: initPP,
+		NextProvingPeriodTask: nextPP,
+		Network:               network,
+		Close:                 closer,
 	}, nil
 }
 

@@ -178,6 +178,16 @@ ALTER TABLE pdp_piecerefs ADD COLUMN data_set_refcount INTEGER NOT NULL DEFAULT 
 -- Backfill (no-op on fresh DB, harmless on re-run).
 UPDATE pdp_piecerefs SET data_set_refcount = proofset_refcount;
 
+-- 20260216-pdp-v0-save-cache.sql: SaveCache task tracking columns on
+-- pdp_piecerefs. needs_save_cache defaults to TRUE so newly-uploaded
+-- pieces get processed by the SaveCache task (which builds the Merkle
+-- layer cache that ProveTask reads on challenge).
+ALTER TABLE pdp_piecerefs ADD COLUMN needs_save_cache INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE pdp_piecerefs ADD COLUMN save_cache_task_id INTEGER
+    REFERENCES harmony_task(id) ON DELETE SET NULL;
+ALTER TABLE pdp_piecerefs ADD COLUMN caching_task_started TEXT DEFAULT NULL;
+ALTER TABLE pdp_piecerefs ADD COLUMN caching_task_completed TEXT DEFAULT NULL;
+
 -- 20260112-pdp-v0-efficiency-indexes.sql (the load-bearing ones):
 CREATE INDEX IF NOT EXISTS idx_pdp_piece_uploads_notify
     ON pdp_piece_uploads (piece_ref)

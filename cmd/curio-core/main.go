@@ -374,8 +374,14 @@ Flags:
 		fmt.Printf("  lantern:  skipped (--no-lantern)\n")
 	}
 
-	// --- Chain deps: ethclient + nodeapi + SenderETH ---
-	chainDeps, err := pdpwire.BuildChainDeps(rootCtx, eng.DB(), lanternDaemon)
+	// stashDir is the directory diskstash writes streaming-upload
+	// files into. Hoisted here so BuildChainDeps can construct the
+	// local piece-park reader (which serves the same files to
+	// cachedreader's piece-park fallback path).
+	stashDir := filepath.Join(*dataDir, "stash")
+
+	// --- Chain deps: ethclient + nodeapi + SenderETH + the proof loop ---
+	chainDeps, err := pdpwire.BuildChainDeps(rootCtx, eng.DB(), stashDir, lanternDaemon)
 	if err != nil {
 		_ = eng.Stop()
 		return fmt.Errorf("pdpwire.BuildChainDeps: %w", err)
@@ -392,7 +398,7 @@ Flags:
 		fmt.Printf("  eth_keys: %s (role=pdp)\n", ethAddr)
 	}
 
-	// --- Engine start: register pdpv0 + SendTaskETH + ChainSync + ParkComplete ---
+	// --- Engine start: register pdpv0 + SendTaskETH + ChainSync + ParkComplete + proof-loop tasks ---
 	var extraTasks []harmonytask.TaskInterface
 	if chainDeps != nil && chainDeps.SendTaskETH != nil {
 		extraTasks = append(extraTasks, chainDeps.SendTaskETH)
@@ -400,13 +406,24 @@ Flags:
 	if chainDeps != nil && chainDeps.ChainSync != nil {
 		extraTasks = append(extraTasks, chainDeps.ChainSync)
 	}
+	if chainDeps != nil && chainDeps.SaveCache != nil {
+		extraTasks = append(extraTasks, chainDeps.SaveCache)
+	}
+	if chainDeps != nil && chainDeps.ProveTask != nil {
+		extraTasks = append(extraTasks, chainDeps.ProveTask)
+	}
+	if chainDeps != nil && chainDeps.InitProvingPeriodTask != nil {
+		extraTasks = append(extraTasks, chainDeps.InitProvingPeriodTask)
+	}
+	if chainDeps != nil && chainDeps.NextProvingPeriodTask != nil {
+		extraTasks = append(extraTasks, chainDeps.NextProvingPeriodTask)
+	}
 	// ParkComplete: curio-core streaming-upload-specific completion
 	// task. Flips parked_pieces.complete=TRUE for pieces whose bytes
 	// landed in diskstash. Upstream's ParkPieceTask does this via
 	// ffi.SealCalls + paths.Remote (cluster-aware bytes-copy); we
 	// don't need that because stash IS our long-term storage.
 	// See internal/parkcomplete for the rationale.
-	stashDir := filepath.Join(*dataDir, "stash")
 	parkComplete := parkcomplete.New(eng.DB(), stashDir)
 	extraTasks = append(extraTasks, parkComplete)
 	// Install the tipset-subscription scheduler BEFORE engine.Start.
