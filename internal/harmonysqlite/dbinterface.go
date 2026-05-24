@@ -16,6 +16,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/curiostorage/harmonyquery"
@@ -198,9 +199,30 @@ func scanWithTimeFix(scan func(...any) error, dst ...any) error {
 
 // parseSQLiteTime tries the SQLite datetime formats modernc produces
 // (and that CURRENT_TIMESTAMP defaults emit) before falling back to
-// the RFC3339 family Go marshals time.Time as.
+// the RFC3339 family Go marshals time.Time as. It also recognizes the
+// shape modernc.org/sqlite stores when a Go time.Time is passed as a
+// driver.Value: Go's default time.Time.String() output, which looks
+// like "2026-05-24 09:44:38.218610887 +0000 UTC" optionally with a
+// monotonic clock suffix " m=+2.176855639".
+//
+// Provenance of each format:
+//
+//	- "2006-01-02 15:04:05.999999999 -0700 MST"  Go time.Time.String()
+//	                                              (modernc default Value())
+//	- "2006-01-02 15:04:05.999999999"             modernc explicit fmt
+//	- "2006-01-02 15:04:05"                       SQLite CURRENT_TIMESTAMP
+//	- time.RFC3339Nano / time.RFC3339             Go MarshalJSON / -Text shape
 func parseSQLiteTime(s string) (time.Time, error) {
+	// Strip Go's monotonic-clock suffix when present. time.Time.String()
+	// appends ` m=±<seconds>` whenever the value carries a monotonic
+	// reading; time.Parse rejects that suffix.
+	if i := strings.Index(s, " m=+"); i >= 0 {
+		s = s[:i]
+	} else if i := strings.Index(s, " m=-"); i >= 0 {
+		s = s[:i]
+	}
 	layouts := []string{
+		"2006-01-02 15:04:05.999999999 -0700 MST",
 		"2006-01-02 15:04:05.999999999",
 		"2006-01-02 15:04:05",
 		time.RFC3339Nano,

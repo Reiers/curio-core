@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS pdp_data_sets (
     unrecoverable_proving_failure_epoch INTEGER,       -- 20260123 rename
     last_termination_attempt_at TEXT,
     termination_backoff_until   TEXT,
+    consecutive_prove_failures INTEGER NOT NULL DEFAULT 0,
+    next_prove_attempt_at      INTEGER,
 
     -- 20260122-pdp-v0-deletion-allowed.sql:
     deletion_allowed INTEGER NOT NULL DEFAULT 0
@@ -183,3 +185,41 @@ CREATE INDEX IF NOT EXISTS idx_pdp_piece_uploads_notify
 
 CREATE INDEX IF NOT EXISTS idx_pdp_piecerefs_data_set_refcount
     ON pdp_piecerefs (data_set_refcount);
+
+-- 20251027-pdp-v0-filecoin-pay.sql: pdp_delete_data_set tracks the
+-- two-phase termination flow for PDP data sets. SQLite port: BIGINT
+-- becomes INTEGER (SQLite is rank-flexible), BOOLEAN stays a 0/1
+-- INTEGER alias which CHECK constraint doesn't need (upstream takes
+-- the same trade).
+--
+-- Schema source: harmony/harmonydb/sql/20251027-pdp-v0-filecoin-pay.sql
+-- (table CREATE) plus 20260122-pdp-v0-deletion-allowed.sql (ADD COLUMN
+-- deletion_allowed). We fold both into one CREATE here since SQLite
+-- is greenfield.
+CREATE TABLE IF NOT EXISTS pdp_delete_data_set (
+    id INTEGER PRIMARY KEY,
+
+    terminate_service_task_id INTEGER,
+    after_terminate_service   INTEGER NOT NULL DEFAULT 0,  -- BOOLEAN
+    terminate_tx_hash         TEXT,
+
+    service_termination_epoch INTEGER,
+
+    delete_data_set_task_id   INTEGER,                     -- nullable per 20260203
+    after_delete_data_set     INTEGER NOT NULL DEFAULT 0,  -- BOOLEAN
+    delete_tx_hash            TEXT,
+
+    terminated                INTEGER NOT NULL DEFAULT 0,  -- BOOLEAN
+    deletion_allowed          INTEGER NOT NULL DEFAULT 0   -- BOOLEAN
+);
+
+-- filecoin_payment_transactions: tx_hash -> rail_ids list. SQLite has
+-- no BIGINT[]; we store rail_ids as a JSON-encoded array TEXT column.
+-- Callers that read this on SQLite use json_each() for iteration.
+-- Pure-Go callers in curio's pdpv0 code path don't read this column
+-- today (it's written by the filecoin-pay sweep and read by the
+-- WebUI), so the TEXT shape is invisible to the active code surface.
+CREATE TABLE IF NOT EXISTS filecoin_payment_transactions (
+    tx_hash  TEXT PRIMARY KEY,
+    rail_ids TEXT NOT NULL DEFAULT '[]'                    -- JSON array of bigints
+);

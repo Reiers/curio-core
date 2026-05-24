@@ -223,3 +223,42 @@ func TestSelect_ScalarSlice_RejectsMultiColumn(t *testing.T) {
 		t.Errorf("expected 'exactly 1 column' error, got: %v", err)
 	}
 }
+
+// TestParseSQLiteTime_GoStringFormat covers the shape modernc.org/sqlite
+// stores when a Go time.Time is passed as a driver.Value: Go's default
+// time.Time.String() output, with optional monotonic-clock suffix.
+//
+// Real-world example caught against the harmonytask singleton path:
+// last_run_time field stored as
+// "2026-05-24 09:44:38.218610887 +0000 UTC m=+2.176855639"
+// which time.Parse rejects.
+func TestParseSQLiteTime_GoStringFormat(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool // true = should parse cleanly
+	}{
+		{"with monotonic", "2026-05-24 09:44:38.218610887 +0000 UTC m=+2.176855639", true},
+		{"with negative monotonic", "2026-05-24 09:44:38.218610887 +0000 UTC m=-2.176855639", true},
+		{"no monotonic", "2026-05-24 09:44:38.218610887 +0000 UTC", true},
+		{"with positive offset", "2026-05-24 11:44:38.218610887 +0200 CEST", true},
+		{"sqlite default", "2026-05-24 09:44:38", true},
+		{"sqlite nanos", "2026-05-24 09:44:38.218610887", true},
+		{"RFC3339Nano", "2026-05-24T09:44:38.218610887Z", true},
+		{"garbage", "not a time", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ts, err := parseSQLiteTime(c.in)
+			if c.want && err != nil {
+				t.Errorf("parseSQLiteTime(%q) returned err: %v", c.in, err)
+			}
+			if !c.want && err == nil {
+				t.Errorf("parseSQLiteTime(%q) expected err, got %v", c.in, ts)
+			}
+			if c.want && err == nil && ts.IsZero() {
+				t.Errorf("parseSQLiteTime(%q) returned zero time", c.in)
+			}
+		})
+	}
+}

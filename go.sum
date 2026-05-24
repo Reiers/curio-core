@@ -65,8 +65,8 @@ github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20260410132809-b5b06616014a h1:JsGTdH9SgerI6M+rEk3FSIreEL3AI87ZSSDq3+Z/Gic=
 github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20260410132809-b5b06616014a/go.mod h1:ioLG6R+5bUSO1oeGSDxOV3FADARuMoytZCSX6MEMQkI=
-github.com/Reiers/curio v1.27.3-0.20260524094326-c759b44e2413 h1:Evwoo+LXIwqQEJ7OD4neuuXmCBtm+ARxXf9Px1DX4xY=
-github.com/Reiers/curio v1.27.3-0.20260524094326-c759b44e2413/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
+github.com/Reiers/curio v1.27.3-0.20260524094956-a237baedf735 h1:gpKr9HRsy2yl6PpJ3otcnGBGZdjZCu8bN80FoXzORGY=
+github.com/Reiers/curio v1.27.3-0.20260524094956-a237baedf735/go.mod h1:aJTPE/tZaD6pcFPGoAYu4U103xKXUR9v0cG14X37bEQ=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13 h1:DDNL54LfDcuIQDRR9W8qE2XtQt0Y5oPOI9TVe+u9GoA=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
 github.com/Reiers/lantern v1.4.1-0.20260523184923-a115cc21ac5d h1:g065PN3T74CaK4ldZRa3QO9Nm5JEo/QKfne+IUMd8q8=
