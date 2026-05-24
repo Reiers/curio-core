@@ -2,7 +2,7 @@
 
 Tracking issue: [Reiers/lantern#11](https://github.com/Reiers/lantern/issues/11). This document is the single source of truth for "where is it." Updated at every meaningful milestone.
 
-Last updated: **2026-05-24 14:30 CEST** (Day 8 COMPLETE: first on-chain tx via curio-core pipeline, SP registered as calibration provider id 25, CurioChainSched + watchers live, synapse-sdk HTTP compat suite green, runtime-network-aware contracts. #56 P1–P4 shipped, P5 in progress.)
+Last updated: **2026-05-24 16:00 CEST** (Day 8 COMPLETE + #56 P5 driven end-to-end on calibration: dataset id 13977 live, piece added, InitProvingPeriod broadcast, proof window opens ~17:47 CEST. Lantern v1.5.1 shipped with `eth_getBlockByNumber` ETH-shape fix. SP provider id is **26** as of today after state.sqlite wipe rotated the wallet.)
 
 ## Day 8 status: COMPLETE
 
@@ -28,14 +28,42 @@ The "drive a real PDP proof through the loop" workstream is most of the way thro
 - **P3.2 — `internal/localpiecepark.Reader`** (69581fd). `pieceprovider.PieceParkBackend` implementation over diskstash, 9 unit tests.
 - **P3.3 — cachedreader construction in curio-core** (69581fd). Confirmed `sectorReader == nil` is safe in the cachedreader code path under the pdpv0-only profile.
 - **P4 — ProveTask + InitProvingPeriodTask + NextProvingPeriodTask + SaveCache wired** (69581fd). All four proving-cycle tasks live in `pdpwire.BuildChainDeps` + `main.go` extraTasks; harmonytask registry now holds the full PDPv0 proving pipeline (13 task types).
-- **P5 — end-to-end signed-`extraData` synapse-sdk flow** — STILL OPEN. Need to drive a proof through the loop with the real synapse-sdk client signing the extraData. In progress now.
+- **P5 — end-to-end signed-`extraData` synapse-sdk flow** — substantially DRIVEN; awaiting proof window. Today's chain of events on calibration:
+
+  | Step | Tx hash | Block | Result |
+  |------|---------|-------|--------|
+  | SP register (provider id 26) | `0x805f9eb6...4c14` | 3,743,372 | ✅ |
+  | USDFC.approve(FilecoinPay, max) | `0x7e98ddca...4376` | 3,743,423 | ✅ |
+  | FilecoinPay.deposit(USDFC, self, 1) | `0xb1a5a086...d826` | 3,743,423 | ✅ |
+  | FilecoinPay.setOperatorApproval(USDFC, FWSS, ...) | `0x44feba7f...cc37` | 3,743,423 | ✅ |
+  | PDPVerifier.createDataSet → **dataSetId 13977** | `0xb00cfc6f...c029` | 3,743,427 | ✅ |
+  | PDPVerifier.addPieces (1 piece) | `0x57002786...8463` | 3,743,476 | ✅ |
+  | InitProvingPeriod | `0x4bd323df...4267d` | pending | ✅ broadcast |
+
+  Three structural gaps closed during P5:
+  - **Lantern `eth_getBlockByNumber` ETH-shape fix** (Lantern v1.5.1, commit 4cda084): `miner` was returning Filecoin-actor strings (`f0143103`) and `hash` fields were CIDs; strict ETH parsers (go-ethereum types.Header) reject these. New `rpc/handlers/ethshape.go` with `EthAddressFromFilecoinIDActor` (0xff || zero(11) || be64(id)) + `EthHashFromCid` (strip canonical DagCBOR+Blake2b-256 prefix). Mirrors lotus/chain/types/ethtypes without taking a lotus dep.
+  - **MessageWatcherEth wasn't constructed in curio-core** (commit 08526c5): upstream wires it via deps/deps.go at startup; we skipped it, so every SenderETH tx stayed `pending` in `message_waits_eth` forever. Now constructed in `main.go` after `engine.Start` via new `Engine.TaskEngine()` accessor.
+  - **Trigger missing on `pdp_data_set_creates`** (commit 08526c5): schema migration 0010 had the v1-name `pdp_proofset_create_message_status_change` trigger but the v0 rename (20250730-pdp-v0-rename.sql) added a sibling for `pdp_data_set_creates` that never made it into curio-core. Result: even with `tx_status='confirmed'`, `pdp_data_set_creates.ok` stayed NULL and dataset_watch never matched. Added both v0-name triggers to 0011.
+
+  Three SQL portability fixes shipped in support:
+  - Reiers/curio fork @2d67414: `tasks/pdpv0/notify_task.go` NOW() → CURRENT_TIMESTAMP
+  - Reiers/curio fork @3b77fde: `pdp/handlers_add.go` `WHERE = ANY($2)` → `WHERE IN ($2, $3, ...)`
+  - curio-core schema 0011: collapsed duplicate `filecoin_payment_transactions` block
+
+  Two CLIs added for the demo flow:
+  - `curio-core demo create-dataset` (commit 1531184) — EIP-712 typed-data for CreateDataSet, signs with pdp wallet, ABI-encodes extraData, POSTs to `/pdp/data-sets`
+  - `curio-core demo prepare-client-payments` (commit 08526c5) — drives the USDFC.approve + FilecoinPay.deposit + setOperatorApproval triple
+  - `curio-core demo add-pieces` (commit 55d9907) — EIP-712 typed-data for AddPieces, auto-upgrades v1→v2 piece CIDs via `commcid.PieceCidV2FromV1`, looks up clientDataSetId via FilecoinWarmStorageServiceStateView
+
+  `prove_at_epoch=3,743,707` on dataset 13977; proof window opens ~17:47 CEST. Cron reminder set for 17:55 CEST to verify ProveTask fired.
 
 ## What works today
 
 - `curio-core probe` boots an embedded Lantern, anchors against either calibration or live mainnet gateway, and shuts down cleanly. 25 MB pure-Go binary, `CGO_ENABLED=0`. CI enforces a 90 MB hard upper bound.
 - `curio-core run` starts the full daemon: SQLite state DB (auto-migrates) → harmonytask task registry (13 PDPv0 entries: 9 original + ProveTask + InitProvingPeriodTask + NextProvingPeriodTask + SaveCache) → first-run config probe → embedded Lantern with VMBridge → WebUI with `/setup` flow → admin/test-tx + admin endpoints. SIGTERM unwinds cleanly.
-- **First on-chain tx through the pipeline:** 1-wei self-transfer landed in calibration block **3742933** via `admin/test-tx`, signed by the curio-core-minted ETH key, sent via SenderETH → Lantern VMBridge.
-- **SP registered on calibration as provider id 25.** `curio-core sp register --submit` broadcast the registration with 7 PDPv0 capability fields populated.
+- **First on-chain tx through the pipeline:** 1-wei self-transfer landed in calibration block **3,742,933** via `admin/test-tx`, signed by the curio-core-minted ETH key, sent via SenderETH → Lantern VMBridge.
+- **SP registered on calibration as provider id 26** (was 25 before today's state.sqlite wipe rotated the wallet). `curio-core sp register --submit` broadcast the registration at block 3,743,372 with 7 PDPv0 capability fields populated.
+- **Dataset 13977 live on calibration FilOzone**, 1 piece added, InitProvingPeriod broadcast, proof window opens ~17:47 CEST (epoch 3,743,707).
 - **CurioChainSched + 3 pdpv0 watchers** consume Lantern's HeadChanges sub on every tipset; `TaskChainSync` plus `InitProvingPeriodWatch`, `NextProvingPeriodWatch`, `ProveWatch` all run clean.
 - **synapse-sdk HTTP compatibility:** 8 tests + 6 route smoke subtests pass against a running curio-core when `CURIO_CORE_URL` is set.
 - **Runtime-network-aware contract addresses.** PDPVerifier (v3.4.0 ABI), FilecoinPay, Payments, WarmStorage resolve from the live chain network at startup; no more compile-time constants for these.
@@ -60,10 +88,24 @@ The "drive a real PDP proof through the loop" workstream is most of the way thro
 
 ## What's left
 
-- **#56 P5** — end-to-end signed-`extraData` synapse-sdk flow that actually drives a proof through the full ProveTask → InitProvingPeriodTask → NextProvingPeriodTask → SaveCache loop. In progress.
+- **#56 P5** — awaiting proof window. ProveTask + SaveCache + InitProvingPeriodTask + NextProvingPeriodTask are all registered + InitPP already ran with result=1; ProveTask fires at epoch 3,743,707 (~17:47 CEST). Cron reminder set for 17:55 to verify the proof landed cleanly.
 - WebUI `//go:build cgo` shim still gates pages/pdp/. Carving out gosigar (darwin), `lotus/storage/sealer`, `curio/lib/proofsvc/common`, and `curio/tasks/seal` is deferred behind Day 8 close.
 - `internal/pdptests/` still gated behind `//go:build pdp_full_carveout`; drop-gate acceptance deferred.
 - No mainnet end-to-end yet; the mainnet SP Registry address is wired (7fd5fce, #7 closed) but actual mainnet registration + proving is a separate workstream.
+
+## Active follow-on tickets (filed today)
+
+- **[#57](https://github.com/Reiers/curio-core/issues/57)** (p1, bug): pdpv0 lifecycle hardening — `task_prove.go` MaxFailures pinning + `save_cache_task_id` FK gap + `notify_task.go` silent data leak. Surfaced by the audit on #29 (closed). Capri's decision: ship our own migrations + sweeper in curio-core's local diff; don't wait for upstream.
+- **[#58](https://github.com/Reiers/curio-core/issues/58)** (p2, bug): `sender.Send` double-send race on transient-error retry. Audit-shaped ticket; needs a decision on (A) tx-hash lookup pre-broadcast vs (B) cache tx-hash even on broadcast error.
+- **[#59](https://github.com/Reiers/curio-core/issues/59)** (p2, bug): post-addPieces watcher errors sweep. Three SQLite portability bugs surfaced live during the P5 push:
+  - `handlers_create.go:164` — `[]int64` insert (SQLite driver can't handle Postgres BIGINT[] natively)
+  - `handlers_pull.go:404` — "no such column: service" (schema gap)
+  - Unknown call site — "near SELECT: syntax error" (Postgres-only construct)
+  - These don't block the proof loop but pollute logs.
+
+## Closed today (12 issues)
+
+[#7](https://github.com/Reiers/curio-core/issues/7), [#8](https://github.com/Reiers/curio-core/issues/8), [#13](https://github.com/Reiers/curio-core/issues/13), [#16](https://github.com/Reiers/curio-core/issues/16), [#17](https://github.com/Reiers/curio-core/issues/17), [#29](https://github.com/Reiers/curio-core/issues/29) (audit), [#30](https://github.com/Reiers/curio-core/issues/30) (audit), [#31](https://github.com/Reiers/curio-core/issues/31) (audit), [#38](https://github.com/Reiers/curio-core/issues/38), [#46](https://github.com/Reiers/curio-core/issues/46), [#54](https://github.com/Reiers/curio-core/issues/54), [#55](https://github.com/Reiers/curio-core/issues/55).
 
 ## Files of record
 
