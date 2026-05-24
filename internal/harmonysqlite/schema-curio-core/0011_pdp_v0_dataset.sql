@@ -120,11 +120,11 @@ CREATE TABLE IF NOT EXISTS pdp_piece_streaming_uploads (
     completed_at TEXT                              -- TIMESTAMPTZ in upstream
 );
 
--- 20251027-pdp-v0-filecoin-pay.sql
-CREATE TABLE IF NOT EXISTS filecoin_payment_transactions (
-    tx_hash  TEXT PRIMARY KEY,
-    rail_ids TEXT NOT NULL              -- BIGINT[] -> TEXT (json-encoded)
-);
+-- 20251027-pdp-v0-filecoin-pay.sql: filecoin_payment_transactions is
+-- defined below near the other dialect-shimmed tables (search for
+-- 'filecoin_payment_transactions' lower in this file). Block elided
+-- here to avoid duplicate definitions; both used IF NOT EXISTS so the
+-- duplication was harmless at runtime but confusing on inspection.
 
 -- 20260109-pdp-v0-pull.sql
 CREATE TABLE IF NOT EXISTS pdp_piece_pulls (
