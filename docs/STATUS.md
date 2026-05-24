@@ -97,15 +97,15 @@ The "drive a real PDP proof through the loop" workstream is most of the way thro
 
 - **[#57](https://github.com/Reiers/curio-core/issues/57)** (p1, bug): pdpv0 lifecycle hardening — `task_prove.go` MaxFailures pinning + `save_cache_task_id` FK gap + `notify_task.go` silent data leak. Surfaced by the audit on #29 (closed). Capri's decision: ship our own migrations + sweeper in curio-core's local diff; don't wait for upstream.
 - **[#58](https://github.com/Reiers/curio-core/issues/58)** (p2, bug): `sender.Send` double-send race on transient-error retry. Audit-shaped ticket; needs a decision on (A) tx-hash lookup pre-broadcast vs (B) cache tx-hash even on broadcast error.
-- **[#59](https://github.com/Reiers/curio-core/issues/59)** (p2, bug): post-addPieces watcher errors sweep. Three SQLite portability bugs surfaced live during the P5 push:
-  - `handlers_create.go:164` — `[]int64` insert (SQLite driver can't handle Postgres BIGINT[] natively)
-  - `handlers_pull.go:404` — "no such column: service" (schema gap)
-  - Unknown call site — "near SELECT: syntax error" (Postgres-only construct)
-  - These don't block the proof loop but pollute logs.
+- ~~**[#59](https://github.com/Reiers/curio-core/issues/59)**~~ (closed 16:05 CEST). Three SQLite portability bugs surfaced live during the P5 push were all fixed:
+  - `pdp/indexing.go` `EnableIndexingForPiecesInTx` — `ANY($2)` with `[]int64` rewritten to IN-list (Reiers/curio @249dd68)
+  - `pdp/handlers_pull.go` `getPiecesStatusBatch` — `ANY($1)` with `[]string` rewritten to IN-list (same commit)
+  - `pdp_piece_pulls` schema rewritten to faithfully match upstream `20260109-pdp-v0-pull.sql` (curio-core @9e3a1b3); applied to live state.sqlite via direct DROP+CREATE.
+  Daemon now logs 0 errors in 60s of runtime; previously each ~30s tipset cycle logged at least one of these three.
 
-## Closed today (12 issues)
+## Closed today (13 issues)
 
-[#7](https://github.com/Reiers/curio-core/issues/7), [#8](https://github.com/Reiers/curio-core/issues/8), [#13](https://github.com/Reiers/curio-core/issues/13), [#16](https://github.com/Reiers/curio-core/issues/16), [#17](https://github.com/Reiers/curio-core/issues/17), [#29](https://github.com/Reiers/curio-core/issues/29) (audit), [#30](https://github.com/Reiers/curio-core/issues/30) (audit), [#31](https://github.com/Reiers/curio-core/issues/31) (audit), [#38](https://github.com/Reiers/curio-core/issues/38), [#46](https://github.com/Reiers/curio-core/issues/46), [#54](https://github.com/Reiers/curio-core/issues/54), [#55](https://github.com/Reiers/curio-core/issues/55).
+[#7](https://github.com/Reiers/curio-core/issues/7), [#8](https://github.com/Reiers/curio-core/issues/8), [#13](https://github.com/Reiers/curio-core/issues/13), [#16](https://github.com/Reiers/curio-core/issues/16), [#17](https://github.com/Reiers/curio-core/issues/17), [#29](https://github.com/Reiers/curio-core/issues/29) (audit), [#30](https://github.com/Reiers/curio-core/issues/30) (audit), [#31](https://github.com/Reiers/curio-core/issues/31) (audit), [#38](https://github.com/Reiers/curio-core/issues/38), [#46](https://github.com/Reiers/curio-core/issues/46), [#54](https://github.com/Reiers/curio-core/issues/54), [#55](https://github.com/Reiers/curio-core/issues/55), [#59](https://github.com/Reiers/curio-core/issues/59).
 
 ## Files of record
 
