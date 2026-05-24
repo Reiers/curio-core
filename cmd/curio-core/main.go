@@ -386,10 +386,13 @@ Flags:
 		fmt.Printf("  eth_keys: %s (role=pdp)\n", ethAddr)
 	}
 
-	// --- Engine start: register pdpv0 + SendTaskETH ---
+	// --- Engine start: register pdpv0 + SendTaskETH + ChainSync ---
 	var extraTasks []harmonytask.TaskInterface
 	if chainDeps != nil && chainDeps.SendTaskETH != nil {
 		extraTasks = append(extraTasks, chainDeps.SendTaskETH)
+	}
+	if chainDeps != nil && chainDeps.ChainSync != nil {
+		extraTasks = append(extraTasks, chainDeps.ChainSync)
 	}
 	if err := eng.Start(rootCtx, extraTasks...); err != nil {
 		_ = eng.Stop()

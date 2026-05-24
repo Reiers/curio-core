@@ -29,6 +29,7 @@ import (
 	"github.com/filecoin-project/curio/lib/ethchain"
 	curiopaths "github.com/filecoin-project/curio/lib/paths"
 	"github.com/filecoin-project/curio/tasks/message"
+	"github.com/filecoin-project/curio/tasks/pdpv0"
 
 	"github.com/curiostorage/harmonyquery"
 
@@ -66,6 +67,17 @@ type ChainDeps struct {
 	// SendTaskETH is the harmonytask the engine must register. It
 	// drives the SenderETH's send queue.
 	SendTaskETH *message.SendTaskETH
+
+	// ChainSync is the singleton pdpv0 task that reconciles deletion
+	// state, proven-data-set failure state, and finalized-deletion
+	// rails against the on-chain FWSS view. Fires every 8 hours via
+	// harmonytask's IAmBored singleton mechanism.
+	//
+	// Reads: pdp_delete_data_set, pdp_data_set, harmony_task tables;
+	// FWSS view contract (FilecoinWarmStorageServiceStateView) via
+	// ethClient. Writes: pdp_delete_data_set rows (clearing stale
+	// task ids; marking finalized state).
+	ChainSync *pdpv0.TaskChainSync
 
 	// Close releases all transport state. Caller defers this for the
 	// process lifetime.
@@ -108,11 +120,14 @@ func BuildChainDeps(ctx context.Context, db harmonyquery.DBInterface, lantern *l
 
 	senderEth, sendTask := message.NewSenderETH(ethC, db)
 
+	chainSync := pdpv0.NewTaskChainSync(db, ethC, senderEth)
+
 	return &ChainDeps{
 		NodeAPI:     nodeC.FullNode(),
 		EthClient:   ethC,
 		SenderETH:   senderEth,
 		SendTaskETH: sendTask,
+		ChainSync:   chainSync,
 		Close:       closer,
 	}, nil
 }
