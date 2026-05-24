@@ -120,14 +120,44 @@ func (s *sqliteTxI) SendBatch(ctx context.Context, b *pgx.Batch) (pgx.BatchResul
 	return nil, errNotSupportedOnSQLite("SendBatch")
 }
 
-// QueryI is the in-transaction streaming cursor. SQLite doesn't expose
-// harmonyquery's *Query type natively. Returns a not-supported error;
-// callers reach this when they iterate row-by-row inside a tx (e.g.
-// pdp/handlers_add.go's piece-add path under a SQL ANY() filter).
-// Curio Core's PDP-only deployment shape doesn't exercise these paths
-// in the demo flow.
-func (s *sqliteTxI) QueryI(sql harmonyquery.RawString, arguments ...any) (*harmonyquery.Query, error) {
-	return nil, errNotSupportedOnSQLite("TxInterface.QueryI")
+// QueryI is the in-transaction streaming cursor. Implemented by wrapping
+// *sql.Rows as a harmonyquery.Qry. Required for upstream code paths that
+// iterate row-by-row inside a tx (e.g. pdp/handlers_add.go's subPieces
+// validation under the IN-list shape we ported from ANY($2)).
+func (s *sqliteTxI) QueryI(sqlStr harmonyquery.RawString, arguments ...any) (*harmonyquery.Query, error) {
+	rows, err := s.tx.Query(string(sqlStr), arguments...)
+	if err != nil {
+		return nil, err
+	}
+	return &harmonyquery.Query{Qry: &sqliteQry{rows: rows}}, nil
+}
+
+// sqliteQry adapts *sql.Rows to harmonyquery.Qry. Six methods total:
+// Next, Err, Close, Scan, Values, plus a couple of internal helpers.
+// Scan goes through scanWithTimeFix so TEXT timestamps round-trip into
+// time.Time correctly (same shim as SelectI).
+type sqliteQry struct {
+	rows *sql.Rows
+}
+
+func (q *sqliteQry) Next() bool             { return q.rows.Next() }
+func (q *sqliteQry) Err() error             { return q.rows.Err() }
+func (q *sqliteQry) Close()                 { _ = q.rows.Close() }
+func (q *sqliteQry) Scan(dst ...any) error  { return scanWithTimeFix(q.rows.Scan, dst...) }
+func (q *sqliteQry) Values() ([]any, error) {
+	cols, err := q.rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	vals := make([]any, len(cols))
+	ptrs := make([]any, len(cols))
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	if err := q.rows.Scan(ptrs...); err != nil {
+		return nil, err
+	}
+	return vals, nil
 }
 
 func (s *sqliteTxI) QueryRowI(sql harmonyquery.RawString, arguments ...any) harmonyquery.Row {
