@@ -218,6 +218,14 @@ func BuildChainDeps(ctx context.Context, dbConcrete *harmonysqlite.DB, stashDir 
 	pdpv0.NewDataSetWatch(db, ethC, sched, network)
 	pdpv0.NewTerminateServiceWatcher(db, ethC, sched, network)
 	pdpv0.NewDataSetDeleteWatcher(db, ethC, sched, network)
+	// Lifecycle sweeper: tipset-driven recovery for #57 (audit on #29).
+	// Re-arms datasets after ProveTask MaxFailures exhaustion and logs
+	// stuck pdp_piece_uploads where notify cascade-cleared the task_id.
+	// Runs on every tipset (~30s) instead of waiting for ChainSync's
+	// 8h interval.
+	if err := pdpv0.NewLifecycleSweeper(db, sched); err != nil {
+		return nil, fmt.Errorf("register lifecycle sweeper: %w", err)
+	}
 
 	// The PDP proof loop: SaveCache builds Merkle layers, ProveTask
 	// submits possession proofs on-chain, InitPP + NextPP manage the

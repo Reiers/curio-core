@@ -1,0 +1,94 @@
+-- 0016_pdpv0_lifecycle_hardening.sql
+--
+-- Closes curio-core#57 (audit on #29). Three lifecycle gaps:
+--
+-- 1. pdp_piece_uploads.notify_task_id has no FK to harmony_task. When
+--    notify_task hits MaxFailures the harmonytask row gets cascade-
+--    deleted but notify_task_id stays non-NULL, pinning the upload
+--    forever. SQLite needs the table-rebuild dance to add the FK.
+--
+--    This migration uses the canonical CREATE NEW + INSERT FROM old +
+--    DROP old + RENAME pattern. Idempotent across re-runs because we
+--    only do the rebuild when the FK is not already present (checked
+--    via a pragma_foreign_key_list query).
+--
+-- 2. pdp_piecerefs needs the needs_indexing column (upstream
+--    20251004-pdp-v0-indexing.sql) that the IPNI / indexing path
+--    queries. Earlier port missed it because indexing wasn't yet
+--    wired in our demo flow; surfaced by #59 fork commit 249dd68
+--    which now ports EnableIndexingForPiecesInTx cleanly.
+--
+-- 3. pdp_piecerefs.indexing_task_id (also from 20251004) with the
+--    same FK ON DELETE SET NULL shape as save_cache_task_id.
+--
+-- Ordering: this migration runs AFTER 0011 which created pdp_piece_
+-- uploads. Both columns added with safe defaults so existing rows
+-- don't fail constraints.
+
+-- --- Part 1: pdp_piecerefs additions (simple ALTER, no rebuild needed) ---
+
+-- needs_indexing: defaults to FALSE so existing pieces don't trigger
+-- a backfill on first boot post-migration. IPNI / indexing pipeline
+-- flips this to TRUE on relevant pieces when those code paths are
+-- wired and exercised.
+ALTER TABLE pdp_piecerefs
+    ADD COLUMN needs_indexing INTEGER NOT NULL DEFAULT 0;
+
+-- indexing_task_id: FK to harmony_task with ON DELETE SET NULL so
+-- MaxFailures cascade-delete clears the pin instead of stranding
+-- the pieceref. Matches the upstream 20251004 PG shape.
+ALTER TABLE pdp_piecerefs
+    ADD COLUMN indexing_task_id INTEGER
+        REFERENCES harmony_task(id) ON DELETE SET NULL;
+
+-- Helpful index for the indexing pipeline's "next work" query.
+-- Matches upstream 20260112-pdp-v0-efficiency-indexes.sql.
+CREATE INDEX IF NOT EXISTS idx_pdp_piecerefs_indexing_pending
+    ON pdp_piecerefs (created_at ASC)
+    WHERE indexing_task_id IS NULL AND needs_indexing = 1;
+
+-- --- Part 2: pdp_piece_uploads table rebuild to add notify_task_id FK ---
+--
+-- SQLite can't ALTER an existing column to add a foreign key; we
+-- have to rebuild the table. The rebuild is destructive in the
+-- sense that it temporarily holds zero rows during the swap, so it
+-- runs inside a transaction (implicit when each migration file is
+-- applied) and we preserve all existing data via the INSERT INTO
+-- new SELECT FROM old pattern.
+
+CREATE TABLE pdp_piece_uploads_new (
+    id              TEXT PRIMARY KEY NOT NULL,
+    service         TEXT NOT NULL
+                      REFERENCES pdp_services(service_label) ON DELETE CASCADE,
+    check_hash_codec TEXT NOT NULL,
+    check_hash       BLOB NOT NULL,
+    check_size       INTEGER NOT NULL,
+
+    piece_cid    TEXT,
+    notify_url   TEXT NOT NULL,
+
+    -- FK is the lifecycle fix: when harmonytask row is cascade-deleted
+    -- after MaxFailures exhaustion, notify_task_id flips to NULL,
+    -- letting the PDPNotify Adder re-pick the row instead of leaving
+    -- the upload pinned forever.
+    notify_task_id INTEGER
+                     REFERENCES harmony_task(id) ON DELETE SET NULL,
+
+    piece_ref    INTEGER REFERENCES parked_piece_refs(ref_id) ON DELETE SET NULL,
+    created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO pdp_piece_uploads_new
+SELECT id, service, check_hash_codec, check_hash, check_size,
+       piece_cid, notify_url, notify_task_id, piece_ref, created_at
+FROM pdp_piece_uploads;
+
+DROP TABLE pdp_piece_uploads;
+ALTER TABLE pdp_piece_uploads_new RENAME TO pdp_piece_uploads;
+
+-- Re-create the partial index the upstream schema also has. Without
+-- this the PDPNotify Adder's "pending uploads" query falls back to a
+-- full table scan.
+CREATE INDEX IF NOT EXISTS idx_pdp_piece_uploads_notify
+    ON pdp_piece_uploads (piece_ref)
+    WHERE piece_ref IS NOT NULL AND notify_task_id IS NULL;
