@@ -37,6 +37,7 @@ import (
 	"github.com/Reiers/curio-core/internal/config"
 	"github.com/Reiers/curio-core/internal/engine"
 	"github.com/Reiers/curio-core/internal/ethkeys"
+	"github.com/Reiers/curio-core/internal/parkcomplete"
 	"github.com/Reiers/curio-core/internal/pdpwire"
 	"github.com/Reiers/curio-core/internal/setupweb"
 
@@ -391,7 +392,7 @@ Flags:
 		fmt.Printf("  eth_keys: %s (role=pdp)\n", ethAddr)
 	}
 
-	// --- Engine start: register pdpv0 + SendTaskETH + ChainSync ---
+	// --- Engine start: register pdpv0 + SendTaskETH + ChainSync + ParkComplete ---
 	var extraTasks []harmonytask.TaskInterface
 	if chainDeps != nil && chainDeps.SendTaskETH != nil {
 		extraTasks = append(extraTasks, chainDeps.SendTaskETH)
@@ -399,6 +400,15 @@ Flags:
 	if chainDeps != nil && chainDeps.ChainSync != nil {
 		extraTasks = append(extraTasks, chainDeps.ChainSync)
 	}
+	// ParkComplete: curio-core streaming-upload-specific completion
+	// task. Flips parked_pieces.complete=TRUE for pieces whose bytes
+	// landed in diskstash. Upstream's ParkPieceTask does this via
+	// ffi.SealCalls + paths.Remote (cluster-aware bytes-copy); we
+	// don't need that because stash IS our long-term storage.
+	// See internal/parkcomplete for the rationale.
+	stashDir := filepath.Join(*dataDir, "stash")
+	parkComplete := parkcomplete.New(eng.DB(), stashDir)
+	extraTasks = append(extraTasks, parkComplete)
 	// Install the tipset-subscription scheduler BEFORE engine.Start.
 	// BuildChainDeps already registered the three pdpv0 watcher
 	// handlers on it (DataSetWatch, TerminateServiceWatcher,
@@ -415,13 +425,13 @@ Flags:
 	if chainDeps != nil && chainDeps.ChainSched != nil {
 		fmt.Printf("  watchers: pdpv0 dataset/terminate/delete handlers wired on tipset sub\n")
 	}
+	fmt.Printf("  parkcomplete: streaming-upload -> parked_pieces.complete bridge active (stash=%s)\n", stashDir)
 
 	// --- HTTP server ---
 	// curio-core composes two route sets under one listener:
 	//   /pdp/*  — upstream curio/pdp HTTP API (synapse-sdk speaks this)
 	//   /, /setup, /api/setup — curio-core's first-run WebUI flow
 	pdpMux := chi.NewRouter()
-	stashDir := filepath.Join(*dataDir, "stash")
 	if _, err := pdpwire.Mount(rootCtx, pdpMux, eng.DB(), stashDir, chainDeps); err != nil {
 		_ = eng.Stop()
 		return fmt.Errorf("pdpwire.Mount: %w", err)
