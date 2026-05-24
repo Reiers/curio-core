@@ -100,16 +100,16 @@ The "drive a real PDP proof through the loop" workstream is most of the way thro
   - **`task_prove.go` RetryWait** linear 30/60/90/120 across MaxFailures=5 (~5 min total budget). Previously fired retries back-to-back.
   - **Schema 0016**: SQLite table-rebuild adds FK `ON DELETE SET NULL` on `pdp_piece_uploads.notify_task_id` + `pdp_piecerefs.needs_indexing` + `.indexing_task_id`.
   Live verification: 0 ERROR / 0 WARN in 60s of runtime post-deploy; sweeper correctly does NOT match the healthy dataset 13977.
-- **[#58](https://github.com/Reiers/curio-core/issues/58)** (p2, bug): `sender.Send` double-send race on transient-error retry. Audit-shaped ticket; needs a decision on (A) tx-hash lookup pre-broadcast vs (B) cache tx-hash even on broadcast error.
+- ~~**[#58](https://github.com/Reiers/curio-core/issues/58)**~~ (closed 16:42 CEST). Audit conclusion: original framing was wrong (`SendTaskETH.Do` never returns error on send failure, so no harmonytask retry, so no double-send). Real race: DB UPDATE after successful broadcast can fail, triggering harmonytask retry which re-broadcasts the same nonce -> false-negative pattern (tx lands on-chain, app sees 'nonce too low' error, client gets HTTP 500 on a request that actually succeeded). Severity medium. Fix tracker filed as [#61](https://github.com/Reiers/curio-core/issues/61): pre-flight `TransactionByHash` + benign-error classification, ~30 LoC, both dependencies (EthClient.TransactionByHash, Lantern VMBridge forwarding) already in place.
 - ~~**[#59](https://github.com/Reiers/curio-core/issues/59)**~~ (closed 16:05 CEST). Three SQLite portability bugs surfaced live during the P5 push were all fixed:
   - `pdp/indexing.go` `EnableIndexingForPiecesInTx` - `ANY($2)` with `[]int64` rewritten to IN-list (Reiers/curio @249dd68)
   - `pdp/handlers_pull.go` `getPiecesStatusBatch` - `ANY($1)` with `[]string` rewritten to IN-list (same commit)
   - `pdp_piece_pulls` schema rewritten to faithfully match upstream `20260109-pdp-v0-pull.sql` (curio-core @9e3a1b3); applied to live state.sqlite via direct DROP+CREATE.
   Daemon now logs 0 errors in 60s of runtime; previously each ~30s tipset cycle logged at least one of these three.
 
-## Closed today (14 issues)
+## Closed today (15 issues)
 
-[#7](https://github.com/Reiers/curio-core/issues/7), [#8](https://github.com/Reiers/curio-core/issues/8), [#13](https://github.com/Reiers/curio-core/issues/13), [#16](https://github.com/Reiers/curio-core/issues/16), [#17](https://github.com/Reiers/curio-core/issues/17), [#29](https://github.com/Reiers/curio-core/issues/29) (audit), [#30](https://github.com/Reiers/curio-core/issues/30) (audit), [#31](https://github.com/Reiers/curio-core/issues/31) (audit), [#38](https://github.com/Reiers/curio-core/issues/38), [#46](https://github.com/Reiers/curio-core/issues/46), [#54](https://github.com/Reiers/curio-core/issues/54), [#55](https://github.com/Reiers/curio-core/issues/55), [#57](https://github.com/Reiers/curio-core/issues/57), [#59](https://github.com/Reiers/curio-core/issues/59).
+[#7](https://github.com/Reiers/curio-core/issues/7), [#8](https://github.com/Reiers/curio-core/issues/8), [#13](https://github.com/Reiers/curio-core/issues/13), [#16](https://github.com/Reiers/curio-core/issues/16), [#17](https://github.com/Reiers/curio-core/issues/17), [#29](https://github.com/Reiers/curio-core/issues/29) (audit), [#30](https://github.com/Reiers/curio-core/issues/30) (audit), [#31](https://github.com/Reiers/curio-core/issues/31) (audit), [#38](https://github.com/Reiers/curio-core/issues/38), [#46](https://github.com/Reiers/curio-core/issues/46), [#54](https://github.com/Reiers/curio-core/issues/54), [#55](https://github.com/Reiers/curio-core/issues/55), [#57](https://github.com/Reiers/curio-core/issues/57), [#58](https://github.com/Reiers/curio-core/issues/58) (audit), [#59](https://github.com/Reiers/curio-core/issues/59).
 
 ## Product vision filed (#60)
 
