@@ -224,11 +224,22 @@ func (e *Engine) Start(ctx context.Context, extraTasks ...harmonytask.TaskInterf
 	impls := []harmonytask.TaskInterface{notify}
 	impls = append(impls, extraTasks...)
 
+	// Resource budget for the harmonytask engine on this machine.
+	//
+	// ProveTask peaks at 3 GiB (3x piece size for the memtree build during
+	// fr32.Pad). The previous 1 GiB budget caused the engine to reject
+	// PDPv0_Prove tasks via CanAccept, leaving them queued in harmony_task
+	// indefinitely without 'Beginning work on Task' ever firing.
+	//
+	// 4 GiB is conservative for a laptop SP (curio-core#60 target): the
+	// Hetzner smoke box has 7 GiB total, mainstream laptops have 8-16 GiB.
+	// CPU stays at the lightweight value; pdpv0 is not CPU-bound (the
+	// proof generation is the only CPU spike and that's one task at a time).
 	reg := &resources.Reg{
 		Resources: resources.Resources{
-			Cpu:       1,
+			Cpu:       4,
 			Gpu:       0,
-			Ram:       1 << 30,
+			Ram:       4 << 30,
 			MachineID: machineID,
 		},
 	}
