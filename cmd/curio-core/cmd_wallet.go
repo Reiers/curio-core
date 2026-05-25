@@ -8,11 +8,16 @@
 //	curio-core wallet export <addr> [--confirm]       print private key (DANGEROUS)
 //	curio-core wallet role <addr> <new-role>          change a key's role
 //	curio-core wallet delete <addr> [--yes]           remove a key
+//	curio-core wallet send [--asset fil|usdfc] <to> <amount>   broadcast value transfer
 //
-// All operations open the DB directly; the daemon does NOT need to be
-// running. After mutations the operator should restart `curio-core run`
-// (or wait for the next eth_keys re-read) so the PDP task pipeline
-// picks up the change.
+// list/new/import/export/role/delete operate on the DB directly; the
+// daemon does NOT need to be running for those. After mutations the
+// operator should restart `curio-core run` (or wait for the next
+// eth_keys re-read) so the PDP task pipeline picks up the change.
+//
+// `send` is different — it REQUIRES the daemon to be running because
+// it posts to /admin/test-tx, which dispatches through SenderETH and
+// gets persisted in message_sends_eth + watched on-chain.
 
 package main
 
@@ -21,14 +26,17 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/Reiers/curio-core/internal/harmonysqlite"
 	"github.com/Reiers/curio-core/internal/wallet"
+	"github.com/filecoin-project/curio/pdp/contract"
 )
 
 func cmdWallet(args []string) error {
@@ -51,6 +59,8 @@ func cmdWallet(args []string) error {
 		return cmdWalletRole(rest)
 	case "delete", "rm":
 		return cmdWalletDelete(rest)
+	case "send":
+		return cmdWalletSend(rest)
 	case "-h", "--help", "help":
 		walletUsage()
 		return nil
@@ -72,6 +82,7 @@ Subcommands:
   export [--confirm] <addr>           Print the private key (DANGEROUS, requires --confirm).
   role <addr> <new-role>              Change a wallet's role.
   delete [--yes] <addr>               Remove a wallet (requires --yes).
+  send [--asset fil|usdfc] <to> <amount>  Broadcast a value transfer (requires running daemon).
 
 Note: standard Go flag parsing — all --flags must come BEFORE positional
 args. e.g.  curio-core wallet delete --yes --data-dir /path 0xabc...
@@ -314,3 +325,156 @@ func openWalletDB(ctx context.Context, dataDir string) (*harmonysqlite.DB, func(
 
 // Keep strings.* referenced to silence lint when no current call uses it.
 var _ = strings.TrimSpace
+
+// --- send ------------------------------------------------------------
+
+// selErc20Transfer is the 4-byte selector for ERC-20 transfer(address,uint256).
+var selErc20Transfer = mustSelector("transfer(address,uint256)")
+
+func cmdWalletSend(args []string) error {
+	fs := flag.NewFlagSet("wallet send", flag.ExitOnError)
+	asset := fs.String("asset", "fil", "asset to send (fil | usdfc)")
+	daemon := fs.String("daemon", "http://127.0.0.1:14994", "daemon base URL (/admin/test-tx will be appended)")
+	network := fs.String("network", "calibration", "network (calibration | mainnet) — used to resolve USDFC contract address")
+	dryRun := fs.Bool("dry-run", false, "print the tx payload without submitting")
+	fs.Parse(args)
+
+	positional := fs.Args()
+	if len(positional) != 2 {
+		return fmt.Errorf("usage: curio-core wallet send [--asset fil|usdfc] [--daemon URL] [--network N] [--dry-run] <to> <amount>")
+	}
+	if !common.IsHexAddress(positional[0]) {
+		return fmt.Errorf("not a valid 0x-prefixed address: %q", positional[0])
+	}
+	to := common.HexToAddress(positional[0])
+
+	assetLower := strings.ToLower(*asset)
+	switch assetLower {
+	case "fil", "usdfc":
+	default:
+		return fmt.Errorf("--asset must be 'fil' or 'usdfc', got %q", *asset)
+	}
+
+	// Parse the amount as a decimal in the asset's display unit
+	// (FIL or USDFC), convert to base units (attoFIL / USDFC base).
+	// Both FIL and USDFC use 18 decimals on EVM rails, so the
+	// conversion is identical: amount * 10^18.
+	amountStr := positional[1]
+	amountBase, err := parseDecimalTo18Decimals(amountStr)
+	if err != nil {
+		return fmt.Errorf("parse amount %q: %w", amountStr, err)
+	}
+	if amountBase.Sign() <= 0 {
+		return fmt.Errorf("amount must be positive, got %s", amountStr)
+	}
+
+	ctx := context.Background()
+
+	var txTo common.Address
+	var txValue *big.Int
+	var txData []byte
+
+	switch assetLower {
+	case "fil":
+		// Native FIL transfer: msg.value = amount, data = nil.
+		txTo = to
+		txValue = amountBase
+		txData = nil
+	case "usdfc":
+		// ERC-20 transfer: tx.to = USDFC contract, msg.value = 0,
+		// data = transfer(to, amount).
+		usdfcAddr, err := contract.USDFCAddressFor(contract.Network(*network))
+		if err != nil {
+			return fmt.Errorf("resolve USDFC address for network %q: %w", *network, err)
+		}
+		abiAddress, err := abi.NewType("address", "", nil)
+		if err != nil {
+			return err
+		}
+		abiUint256, err := abi.NewType("uint256", "", nil)
+		if err != nil {
+			return err
+		}
+		calldata, err := encodeCall(
+			selErc20Transfer,
+			abi.Arguments{{Type: abiAddress}, {Type: abiUint256}},
+			to,
+			amountBase,
+		)
+		if err != nil {
+			return fmt.Errorf("encode transfer(to, amount): %w", err)
+		}
+		txTo = usdfcAddr
+		txValue = big.NewInt(0)
+		txData = calldata
+	}
+
+	fmt.Printf("wallet send:\n")
+	fmt.Printf("  asset:   %s\n", strings.ToUpper(assetLower))
+	fmt.Printf("  to:      %s\n", to.Hex())
+	fmt.Printf("  amount:  %s %s (= %s base units)\n", amountStr, strings.ToUpper(assetLower), amountBase.String())
+	if assetLower == "usdfc" {
+		fmt.Printf("  via:     %s (USDFC on %s)\n", txTo.Hex(), *network)
+	}
+
+	if *dryRun {
+		fmt.Printf("\n--dry-run set; not submitting. Calldata: 0x%x\n", txData)
+		return nil
+	}
+
+	txHash, err := submitViaAdminTestTx(ctx, *daemon, txTo, txValue, txData)
+	if err != nil {
+		return fmt.Errorf("submit via daemon %s: %w (is the daemon running? try 'curio-core run')", *daemon, err)
+	}
+	fmt.Printf("  txHash:  %s\n", txHash)
+	return nil
+}
+
+// parseDecimalTo18Decimals parses a decimal string (e.g. "1.5" or "0.001")
+// and returns the value in base units assuming 18 decimal places.
+// Both FIL and USDFC use 18 decimals on EVM rails.
+func parseDecimalTo18Decimals(s string) (*big.Int, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, fmt.Errorf("empty")
+	}
+	neg := false
+	if s[0] == '-' {
+		neg = true
+		s = s[1:]
+	} else if s[0] == '+' {
+		s = s[1:]
+	}
+
+	parts := strings.SplitN(s, ".", 2)
+	intPart := parts[0]
+	fracPart := ""
+	if len(parts) == 2 {
+		fracPart = parts[1]
+	}
+	if intPart == "" {
+		intPart = "0"
+	}
+
+	if len(fracPart) > 18 {
+		return nil, fmt.Errorf("more than 18 decimal places")
+	}
+	// Pad fractional part to 18 digits.
+	fracPadded := fracPart + strings.Repeat("0", 18-len(fracPart))
+
+	combined := intPart + fracPadded
+	// Strip a leading zero pad so big.Int sees clean decimal.
+	combined = strings.TrimLeft(combined, "0")
+	if combined == "" {
+		combined = "0"
+	}
+
+	n, ok := new(big.Int).SetString(combined, 10)
+	if !ok {
+		return nil, fmt.Errorf("not a valid decimal: %q", s)
+	}
+	if neg {
+		n = n.Neg(n)
+	}
+	return n, nil
+}
