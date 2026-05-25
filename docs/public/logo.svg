@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Curio Core mark — v2.
+
+  Iteration on v1 feedback:
+    - v1 had the teal accent dot on the right edge, which felt like a
+      sticker on the form. v2 places the teal at the geometric CENTER
+      of the rhombus, literally rendering "the core". This also keeps
+      the silhouette symmetric and balanced.
+    - The outer rhombus stays as the shell. The central teal dot is the
+      core inside the shell.
+
+  Design philosophy: where the parent Curio mark is a layered isometric
+  cube, Curio Core reduces to "front face + core dot". One rhombus.
+  One teal mark at center. The reduction itself is the brand statement.
+
+  Palette: teal accent (#22BFC4) preserved from parent; near-black
+  (#1A1A1A) instead of the parent's purples to reinforce the slim-fork
+  identity.
+
+  Geometry: 256x256 viewbox; rhombus inscribed with the four points at
+  (128,32), (224,128), (128,224), (32,128). Perfectly square => the
+  rhombus is a 45-degree-rotated square, which reads clean at every
+  size.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Curio Core</title>
+
+  <!-- The shell: a single rotated square. -->
+  <path
+    d="M 128 32 L 224 128 L 128 224 L 32 128 Z"
+    fill="none"
+    stroke="#1A1A1A"
+    stroke-width="7"
+    stroke-linejoin="round"
+  />
+
+  <!-- The core: teal dot at the geometric center.
+       Size chosen so the dot reads at favicon (16px) scale without
+       dissolving into the stroke. -->
+  <circle cx="128" cy="128" r="20" fill="#22BFC4" />
+</svg>
