@@ -31,6 +31,9 @@ import (
 	lantern "github.com/Reiers/lantern/pkg/daemon"
 	"github.com/Reiers/lantern/wallet"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/filecoin-project/curio/pdp/contract"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Reiers/curio-core/internal/admin"
@@ -39,6 +42,7 @@ import (
 	"github.com/Reiers/curio-core/internal/engine"
 	"github.com/Reiers/curio-core/internal/ethkeys"
 	"github.com/Reiers/curio-core/internal/parkcomplete"
+	"github.com/Reiers/curio-core/internal/payments"
 	"github.com/Reiers/curio-core/internal/pdpwire"
 	"github.com/Reiers/curio-core/internal/retrieval"
 	"github.com/Reiers/curio-core/internal/setupweb"
@@ -435,6 +439,31 @@ Flags:
 	// See internal/parkcomplete for the rationale.
 	parkComplete := parkcomplete.New(eng.DB(), stashDir)
 	extraTasks = append(extraTasks, parkComplete)
+
+	// PaymentSettle: discovers + settles USDFC payment rails for the
+	// PDP-as-SP role. FilecoinWarmStorageService creates one rail per
+	// client/dataset; we must call settleRail to claim accrued USDFC.
+	// Without this task, USDFC stays locked in FilecoinPay and never
+	// reaches our balance. See internal/payments.
+	if chainDeps != nil && chainDeps.EthClient != nil && chainDeps.SenderETH != nil {
+		payeeHex, lookupErr := ethkeys.LookupPDP(rootCtx, eng.DB())
+		if lookupErr != nil || payeeHex == "" {
+			fmt.Printf("  payments: skipped (no eth_keys role=pdp: %v)\n", lookupErr)
+		} else {
+			payContractNet := contract.Network(*network)
+			settleTask, settleErr := payments.New(
+				eng.DB(), chainDeps.EthClient, chainDeps.SenderETH,
+				payContractNet, common.HexToAddress(payeeHex),
+			)
+			if settleErr != nil {
+				fmt.Printf("  payments: skipped (%v)\n", settleErr)
+			} else {
+				extraTasks = append(extraTasks, settleTask)
+				fmt.Printf("  payments: USDFC rail settler active (every %s, payee=%s)\n",
+					payments.PollInterval, payeeHex)
+			}
+		}
+	}
 	// Install the tipset-subscription scheduler BEFORE engine.Start.
 	// BuildChainDeps already registered the three pdpv0 watcher
 	// handlers on it (DataSetWatch, TerminateServiceWatcher,
