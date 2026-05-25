@@ -1,0 +1,45 @@
+{{define "storage"}}{{template "_head" .}}{{template "_open_body" .}}
+{{$d := .Data}}
+<section class="grid grid-3">
+  <div class="card card-tight">
+    <div class="stat-label">Pieces stored</div>
+    <div class="stat-num">{{$d.PiecesComplete}}</div>
+    <div class="stat-sub">{{$d.PiecesIncomplete}} incomplete</div>
+  </div>
+  <div class="card card-tight">
+    <div class="stat-label">Logical bytes</div>
+    <div class="stat-num">{{humanBytes $d.PiecesBytes}}</div>
+    <div class="stat-sub">sum of piece_raw_size</div>
+  </div>
+  <div class="card card-tight">
+    <div class="stat-label">Physical stash size</div>
+    <div class="stat-num">{{if gt $d.StashSizeBytes 0}}{{humanBytes $d.StashSizeBytes}}{{else}}<span class="dim">—</span>{{end}}</div>
+    <div class="stat-sub mono">{{if $d.StashSizeErr}}<span class="text-fail">{{$d.StashSizeErr}}</span>{{else}}disk usage of stash dir{{end}}</div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h2>Storage paths</h2>
+      <p>Where curio-core keeps its on-disk state. Set via <code>--data-dir</code> at boot; changing requires a service restart.</p>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Stash directory <span class="dim">(parked_pieces)</span></label>
+    <input class="input mono" value="{{$d.StashDir}}" readonly>
+    <div class="field-help">All client pieces upload-streamed and committed here. Long-term storage = this directory.</div>
+  </div>
+
+  <div class="field">
+    <label>Data directory</label>
+    <input class="input mono" value="{{$d.DataDir}}" readonly>
+    <div class="field-help">SQLite state DB + Lantern header store + JWT tokens.</div>
+  </div>
+
+  <div class="flash-info mt-4">
+    <strong>Changing paths:</strong> stop the curio-core service, move (don't copy) the directory to its new location, and restart with the updated <code>--data-dir</code> flag. Migrations are forward-only; we do not yet support live path changes.
+  </div>
+</section>
+{{template "_close_body" .}}{{end}}

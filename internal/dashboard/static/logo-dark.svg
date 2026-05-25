@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Curio Core mark — dark-mode variant.
+
+  Same geometry as the canonical mark (docs/assets/curio-core-mark.svg),
+  but the rhombus stroke is light grey instead of near-black so the
+  silhouette reads cleanly on a black/charcoal dashboard background.
+  The teal core dot is unchanged - it carries the brand against either
+  background.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Curio Core</title>
+  <path
+    d="M 128 32 L 224 128 L 128 224 L 32 128 Z"
+    fill="none"
+    stroke="#E5E5E5"
+    stroke-width="7"
+    stroke-linejoin="round"
+  />
+  <circle cx="128" cy="128" r="20" fill="#22BFC4" />
+</svg>

@@ -1,0 +1,54 @@
+{{define "datasets"}}{{template "_head" .}}{{template "_open_body" .}}
+{{$d := .Data}}
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h2>PDP datasets</h2>
+      <p>Active client storage agreements + proof status. Each row is one on-chain dataset registered to this SP.</p>
+    </div>
+    <span class="pill pill-mute">{{len $d.Datasets}} rows</span>
+  </div>
+
+  {{if not $d.Datasets}}
+  <div class="empty-state">
+    <p>No datasets yet.</p>
+    <p class="hint">Datasets appear when a client creates one via <code>POST /pdp/data-sets</code>.</p>
+  </div>
+  {{else}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Status</th>
+          <th>Next prove</th>
+          <th>Last prove</th>
+          <th>Failures</th>
+          <th>Init</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $d.Datasets}}
+        <tr>
+          <td class="mono">{{.ID}}</td>
+          <td>
+            {{if and .TerminatedAtEpoch.Valid (gt .TerminatedAtEpoch.Int64 0)}}
+              <span class="pill pill-fail">terminated @ {{.TerminatedAtEpoch.Int64}}</span>
+            {{else if gt .ConsecutiveProveFailure 0}}
+              <span class="pill pill-warn">{{.ConsecutiveProveFailure}} consecutive fail</span>
+            {{else}}
+              <span class="pill pill-ok">healthy</span>
+            {{end}}
+          </td>
+          <td class="mono">{{if .ProveAtEpoch.Valid}}{{.ProveAtEpoch.Int64}}{{else}}—{{end}}</td>
+          <td class="mono">{{if .PrevChallengeReqEpoch.Valid}}{{.PrevChallengeReqEpoch.Int64}}{{else}}—{{end}}</td>
+          <td>{{.ConsecutiveProveFailure}}</td>
+          <td>{{yesno .InitReady}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</section>
+{{template "_close_body" .}}{{end}}

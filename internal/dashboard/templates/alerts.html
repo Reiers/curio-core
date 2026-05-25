@@ -1,0 +1,42 @@
+{{define "alerts"}}{{template "_head" .}}{{template "_open_body" .}}
+{{$d := .Data}}
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h2>Alerts</h2>
+      <p>Operational issues surfaced from the alerts task poller (runs every 30s).</p>
+    </div>
+    <span class="pill pill-mute">{{len $d.Alerts}} entries</span>
+  </div>
+
+  {{if not $d.Alerts}}
+  <div class="empty-state">
+    <p class="text-emerald">✓ All clear. No alerts.</p>
+  </div>
+  {{else}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Status</th><th>Created</th></tr></thead>
+      <tbody>
+        {{range $d.Alerts}}
+        <tr>
+          <td class="mono">{{.ID}}</td>
+          <td>
+            {{.Title}}
+            {{if .Message.Valid}}<div class="text-xs muted">{{.Message.String}}</div>{{end}}
+          </td>
+          <td>
+            {{if eq .Severity "critical"}}<span class="pill pill-fail">{{.Severity}}</span>
+            {{else if eq .Severity "warning"}}<span class="pill pill-warn">{{.Severity}}</span>
+            {{else}}<span class="pill pill-info">{{.Severity}}</span>{{end}}
+          </td>
+          <td>{{if gt .Ack 0}}<span class="pill pill-mute">acked</span>{{else}}<span class="pill pill-warn">open</span>{{end}}</td>
+          <td class="mono text-xs muted">{{.Created}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</section>
+{{template "_close_body" .}}{{end}}

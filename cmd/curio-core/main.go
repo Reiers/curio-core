@@ -42,6 +42,7 @@ import (
 	"github.com/Reiers/curio-core/internal/engine"
 	"github.com/Reiers/curio-core/internal/ethkeys"
 	"github.com/Reiers/curio-core/internal/parkcomplete"
+	"github.com/Reiers/curio-core/internal/dashboard"
 	"github.com/Reiers/curio-core/internal/payments"
 	"github.com/Reiers/curio-core/internal/pdpwire"
 	"github.com/Reiers/curio-core/internal/retrieval"
@@ -547,7 +548,38 @@ Flags:
 	retrieval.Routes(pdpMux, eng.DB(), stashDir)
 	fmt.Printf("  retrieval:/piece/{pieceCid} mounted (HTTP Range, ETag, immutable cache)\n")
 
-	handler := pdpwire.FallbackHandler(pdpMux, setupweb.New(eng.DB()))
+	// Operator + client dashboard (Curio Core branded). Wired as the
+	// fallthrough behind setupweb's first-run guard: while first-run
+	// is incomplete every non-setup request still redirects to /setup;
+	// once complete, requests fall into the dashboard.
+	dashMux := chi.NewRouter()
+	{
+		payeeForDash := ""
+		if p, err := ethkeys.LookupPDP(rootCtx, eng.DB()); err == nil {
+			payeeForDash = p
+		}
+		dashCfg := dashboard.Config{
+			Network:      *network,
+			Version:      "0.0.1-prealpha",
+			PayeeAddress: payeeForDash,
+			StashDir:     stashDir,
+			DataDir:      *dataDir,
+		}
+		if chainDeps != nil {
+			dashCfg.EthClient = chainDeps.EthClient
+		}
+		dashSrv, dErr := dashboard.NewServer(eng.DB(), dashCfg)
+		if dErr != nil {
+			_ = eng.Stop()
+			return fmt.Errorf("dashboard.NewServer: %w", dErr)
+		}
+		dashSrv.Routes(dashMux)
+		fmt.Printf("  dashboard: /, /wallets, /datasets, /rails, /tasks, /alerts mounted (Curio Core branded)\n")
+	}
+	setupHandler := setupweb.New(eng.DB())
+	setupHandler.Inner = dashMux
+	setupHandler.DisableFirstRunRedirect = true
+	handler := pdpwire.FallbackHandler(pdpMux, setupHandler)
 	srv := &http.Server{
 		Addr:              *listenAddr,
 		Handler:           handler,

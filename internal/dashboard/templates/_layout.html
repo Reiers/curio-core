@@ -1,0 +1,106 @@
+{{define "_head"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{.Title}} · Curio Core</title>
+  <link rel="icon" type="image/svg+xml" href="/static/logo-dark.svg">
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="/static/gradient.js"></script>
+</head>{{end}}
+
+{{define "_open_body"}}<body>
+  <div class="bg-gradient" aria-hidden="true"></div>
+  <div class="layout">
+    {{template "_sidebar" .}}
+    <main class="main">
+      {{template "_topbar" .}}
+      <div class="content">{{end}}
+
+{{define "_sidebar"}}
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <img src="/static/logo-dark.svg" alt="Curio Core">
+    <div>
+      <span class="name">Curio Core</span>
+      <span class="tag">HOT-STORAGE SP</span>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">Monitor</div>
+    <a href="/" class="nav-link {{if eq .Active "overview"}}active{{end}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12 12 3l9 9M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg>
+      <span>Overview</span>
+    </a>
+    <a href="/datasets" class="nav-link {{if eq .Active "datasets"}}active{{end}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5a8 4 0 1 0 16 0A8 4 0 1 0 4 5zm0 0v14a8 4 0 0 0 16 0V5M4 12a8 4 0 0 0 16 0"/></svg>
+      <span>Datasets</span>
+    </a>
+    <a href="/rails" class="nav-link {{if eq .Active "rails"}}active{{end}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-3.3 0-6 1.3-6 3v6c0 1.7 2.7 3 6 3s6-1.3 6-3v-6c0-1.7-2.7-3-6-3zm0 0V5m-6 6c0 1.7 2.7 3 6 3s6-1.3 6-3"/></svg>
+      <span>Rails (USDFC)</span>
+    </a>
+    <a href="/tasks" class="nav-link {{if eq .Active "tasks"}}active{{end}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+      <span>Tasks</span>
+    </a>
+    <a href="/alerts" class="nav-link {{if eq .Active "alerts"}}active{{end}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14V11a6 6 0 1 0-12 0v3a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0m6 0H9"/></svg>
+      <span>Alerts</span>
+    </a>
+
+    <div class="sidebar-section">Operate</div>
+    <a href="/wallets" class="nav-link {{if eq .Active "wallets"}}active{{end}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h15a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7zm0 0V6a2 2 0 0 1 2-2h13M17 14h.01"/></svg>
+      <span>Wallets</span>
+    </a>
+    <a href="/storage" class="nav-link {{if eq .Active "storage"}}active{{end}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7l2-3h14l2 3M3 7v12a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7M3 7h18M7 11h2m4 0h4"/></svg>
+      <span>Storage</span>
+    </a>
+    <a href="/upload" class="nav-link {{if eq .Active "upload"}}active{{end}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 10l5-5 5 5M12 5v14"/></svg>
+      <span>Upload</span>
+    </a>
+    <a href="/terminal" class="nav-link {{if eq .Active "terminal"}}active{{end}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm3 5l3 3-3 3m6 0h4"/></svg>
+      <span>Terminal</span>
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <span class="pill pill-info">{{.Build.Network}}</span>
+    <span class="text-xs dim mono">{{.Build.Version}}</span>
+  </div>
+</aside>
+{{end}}
+
+{{define "_topbar"}}
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="flex">
+      <div class="mobile-brand">
+        <img src="/static/logo-dark.svg" alt="Curio Core">
+        <span class="name">Curio Core</span>
+      </div>
+      <h1>{{.Title}}</h1>
+    </div>
+    <div class="flex">
+      {{if .Cfg.PayeeAddress}}
+      <span class="pill pill-mute" title="Configured PDP wallet (eth_keys role=pdp)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+        {{shortAddr .Cfg.PayeeAddress}}
+      </span>
+      {{end}}
+    </div>
+  </div>
+</header>
+{{end}}
+
+{{define "_close_body"}}      </div>
+    </main>
+  </div>
+</body>
+</html>{{end}}

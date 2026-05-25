@@ -1,0 +1,145 @@
+{{define "upload"}}{{template "_head" .}}{{template "_open_body" .}}
+{{$d := .Data}}
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h2>Upload a piece</h2>
+      <p>Streams a file into the SP via the synapse-sdk-compatible upload flow. Two phases: <code>POST /pdp/piece/uploads</code> to mint a session, then <code>PUT</code> the bytes with progress.</p>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div>
+      <div class="field">
+        <label>File</label>
+        <input type="file" id="upload-file" class="input">
+        <div class="field-help" id="upload-file-info">Pick any file. Padded CommP is computed by the SP after upload completes.</div>
+      </div>
+
+      <div class="field">
+        <label>Service label</label>
+        <input id="upload-service" class="input mono" value="public" placeholder="public">
+        <div class="field-help">Default <code>public</code>. Must match a row in <code>pdp_services</code>.</div>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button id="upload-btn" class="btn btn-primary" onclick="startUpload()">Start upload</button>
+        <button id="upload-cancel" class="btn btn-ghost" onclick="cancelUpload()" style="display:none;">Cancel</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card card-tight">
+        <div class="stat-label">Status</div>
+        <div id="upload-state" class="mono mt-4" style="font-size:14px;">idle</div>
+        <div class="progress"><div id="upload-bar" class="progress-bar"></div></div>
+        <div id="upload-detail" class="mono mt-4 dim" style="font-size:11px; line-height:1.6;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="upload-result" class="mt-6" style="display:none;"></div>
+</section>
+
+<script>
+var xhr = null;
+function fmtBytes(n) {
+  if (!n) return '0 B';
+  var u = ['B','KiB','MiB','GiB','TiB']; var i = 0;
+  while (n >= 1024 && i < u.length-1) { n /= 1024; i++; }
+  return n.toFixed(i ? 1 : 0) + ' ' + u[i];
+}
+function setState(s, ok) {
+  var el = document.getElementById('upload-state');
+  el.textContent = s;
+  el.className = 'mono mt-4 ' + (ok === false ? 'text-fail' : ok ? 'text-ok' : '');
+}
+function setProgress(pct, kind) {
+  var bar = document.getElementById('upload-bar');
+  bar.style.width = pct + '%';
+  bar.className = 'progress-bar' + (kind ? ' bar-' + kind : '');
+}
+function setDetail(s) { document.getElementById('upload-detail').textContent = s; }
+function cancelUpload() {
+  if (xhr) { xhr.abort(); xhr = null; }
+}
+async function startUpload() {
+  var f = document.getElementById('upload-file').files[0];
+  if (!f) { setState('Pick a file first', false); return; }
+  var service = document.getElementById('upload-service').value || 'public';
+  var result = document.getElementById('upload-result');
+  result.style.display = 'none';
+  setState('Creating upload session...');
+  setProgress(0);
+  setDetail('phase 1/2 — POST /pdp/piece/uploads');
+
+  try {
+    // Phase 1: mint streaming-upload session.
+    var sessResp = await fetch('/pdp/piece/uploads', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ service: service, raw_size: f.size }),
+    });
+    if (!sessResp.ok) {
+      var t = await sessResp.text();
+      throw new Error('POST /pdp/piece/uploads -> HTTP ' + sessResp.status + ': ' + t);
+    }
+    var sess = await sessResp.json();
+    var uuid = sess.uuid || sess.id || sess.upload_uuid;
+    if (!uuid) throw new Error('no upload uuid in session response: ' + JSON.stringify(sess));
+
+    setState('Uploading bytes...');
+    setDetail('phase 2/2 — PUT /pdp/piece/uploads/' + uuid + '   (' + fmtBytes(f.size) + ')');
+    document.getElementById('upload-cancel').style.display = '';
+
+    // Phase 2: PUT bytes with progress.
+    xhr = new XMLHttpRequest();
+    xhr.open('PUT', '/pdp/piece/uploads/' + uuid);
+    xhr.upload.onprogress = function(ev) {
+      if (ev.lengthComputable) {
+        var pct = ev.loaded / ev.total * 100;
+        setProgress(pct);
+        setDetail(fmtBytes(ev.loaded) + ' / ' + fmtBytes(ev.total) + ' (' + pct.toFixed(1) + '%)');
+      }
+    };
+    xhr.onload = function() {
+      document.getElementById('upload-cancel').style.display = 'none';
+      xhr = null;
+      if (this.status >= 200 && this.status < 300) {
+        setProgress(100, 'ok');
+        setState('Upload complete', true);
+        setDetail(fmtBytes(f.size) + ' uploaded · session ' + uuid);
+
+        result.style.display = 'block';
+        result.className = 'flash-ok';
+        result.innerHTML = '<strong>Done.</strong> Piece is now in the streaming-upload pipeline. CommP will be computed and the piece registered in parked_pieces within ~30s. Watch <a href="/tasks">/tasks</a> for ParkComplete.';
+      } else {
+        setProgress(100, 'fail');
+        setState('Upload failed', false);
+        setDetail('HTTP ' + this.status + ': ' + (this.responseText || '').slice(0, 200));
+        result.style.display = 'block';
+        result.className = 'flash-err';
+        result.textContent = 'HTTP ' + this.status + ': ' + this.responseText;
+      }
+    };
+    xhr.onerror = function() {
+      document.getElementById('upload-cancel').style.display = 'none';
+      xhr = null;
+      setProgress(100, 'fail');
+      setState('Network error', false);
+    };
+    xhr.onabort = function() {
+      setProgress(0, 'fail');
+      setState('Cancelled', false);
+      setDetail('aborted by user');
+    };
+    xhr.send(f);
+  } catch (e) {
+    setState('Error', false);
+    setDetail(e.message);
+    setProgress(100, 'fail');
+    document.getElementById('upload-cancel').style.display = 'none';
+  }
+}
+</script>
+{{template "_close_body" .}}{{end}}

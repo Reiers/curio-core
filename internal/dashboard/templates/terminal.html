@@ -1,0 +1,108 @@
+{{define "terminal"}}{{template "_head" .}}{{template "_open_body" .}}
+{{$d := .Data}}
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h2>Terminal</h2>
+      <p>Read-only operator commands. The full shell is intentionally <em>not</em> exposed; only allowlisted curio-core subcommands run here.</p>
+    </div>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-head">
+      <span class="dot live" id="term-dot"></span>
+      <span class="title">curio-core · loopback only · 30s/command timeout</span>
+      <span class="dim mono" style="font-size:10px;">{{len $d.AllowedCommands}} commands</span>
+    </div>
+    <div class="terminal-body" id="term-body">
+<span class="terminal-line dim">Curio Core operator terminal. Type one of:</span>
+{{range $d.AllowedCommands}}<span class="terminal-line dim">  curio-core {{.}}</span>
+{{end}}<span class="terminal-line dim">Use ↑/↓ for history.</span>
+    </div>
+    <div class="terminal-input-row">
+      <span class="prompt">$</span>
+      <input id="term-input" class="terminal-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="version" autofocus>
+    </div>
+  </div>
+
+  <div class="mt-6 flex" style="flex-wrap: wrap; gap: 8px;">
+    <span class="muted text-xs">Quick:</span>
+    {{range $d.AllowedCommands}}<button class="btn btn-ghost btn-xs" onclick="termQuick('{{.}}')">{{.}}</button>{{end}}
+  </div>
+</section>
+
+<script>
+var history = [];
+var hidx = -1;
+var input = document.getElementById('term-input');
+var body = document.getElementById('term-body');
+
+function appendLine(html, cls) {
+  var span = document.createElement('span');
+  span.className = 'terminal-line ' + (cls || '');
+  span.innerHTML = html;
+  body.appendChild(span);
+  body.appendChild(document.createTextNode('\n'));
+  body.scrollTop = body.scrollHeight;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+
+function termQuick(cmd) {
+  input.value = cmd;
+  input.focus();
+  runCmd();
+}
+
+async function runCmd() {
+  var cmd = input.value.trim();
+  if (!cmd) return;
+  input.value = '';
+  history.push(cmd); hidx = history.length;
+  appendLine(escapeHtml(cmd), 'cmd');
+  try {
+    var args = cmd.split(/\s+/);
+    var r = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ args: args }),
+    });
+    var j = await r.json();
+    if (j.error) {
+      appendLine('error: ' + escapeHtml(j.error), 'err');
+      return;
+    }
+    if (j.stdout) appendLine(escapeHtml(j.stdout));
+    if (j.stderr) appendLine(escapeHtml(j.stderr), 'err');
+    var meta = 'exit=' + j.exit_code + ' duration=' + j.duration;
+    if (j.truncated) meta += ' [output truncated]';
+    appendLine(meta, 'dim');
+  } catch (e) {
+    appendLine('network error: ' + escapeHtml(e.message), 'err');
+  }
+}
+
+input.addEventListener('keydown', function(ev) {
+  if (ev.key === 'Enter') { runCmd(); }
+  else if (ev.key === 'ArrowUp') {
+    if (hidx > 0) { hidx--; input.value = history[hidx]; }
+    ev.preventDefault();
+  } else if (ev.key === 'ArrowDown') {
+    if (hidx < history.length - 1) { hidx++; input.value = history[hidx]; }
+    else { hidx = history.length; input.value = ''; }
+    ev.preventDefault();
+  }
+});
+
+// Optional ?prefill=... support (wallets page links to /terminal?prefill=wallet+new)
+(function() {
+  var p = new URLSearchParams(window.location.search).get('prefill');
+  if (p) {
+    input.value = p.replace(/\+/g, ' ');
+  }
+})();
+</script>
+{{template "_close_body" .}}{{end}}

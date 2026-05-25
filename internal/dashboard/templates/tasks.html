@@ -1,0 +1,50 @@
+{{define "tasks"}}{{template "_head" .}}{{template "_open_body" .}}
+{{$d := .Data}}
+<section class="card">
+  <h2>Active tasks</h2>
+  {{if not $d.Active}}
+  <p class="muted text-sm">Scheduler queue is empty.</p>
+  {{else}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>ID</th><th>Name</th><th>Posted</th><th>Owner</th></tr></thead>
+      <tbody>
+        {{range $d.Active}}
+        <tr>
+          <td class="mono">{{.ID}}</td>
+          <td class="mono">{{.Name}}</td>
+          <td class="mono text-xs muted">{{if .PostedTime.Valid}}{{.PostedTime.String}}{{else}}—{{end}}</td>
+          <td>{{if .OwnerID.Valid}}<span class="pill pill-ok">owner #{{.OwnerID.Int64}}</span>{{else}}<span class="pill pill-mute">queued</span>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</section>
+
+<section class="card mt-6">
+  <h2>Recent history (last 50)</h2>
+  {{if not $d.Recent}}
+  <p class="muted text-sm">No completed tasks recorded yet.</p>
+  {{else}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Hist#</th><th>Task</th><th>Name</th><th>Ended</th><th>Result</th><th>Error</th></tr></thead>
+      <tbody>
+        {{range $d.Recent}}
+        <tr>
+          <td class="mono">{{.ID}}</td>
+          <td class="mono">{{.TaskID}}</td>
+          <td class="mono">{{.Name}}</td>
+          <td class="mono text-xs muted">{{.WorkEnd}}</td>
+          <td>{{if gt .Result 0}}<span class="pill pill-ok">ok</span>{{else}}<span class="pill pill-fail">fail</span>{{end}}</td>
+          <td class="mono text-xs text-rose">{{.ErrShort}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</section>
+{{template "_close_body" .}}{{end}}

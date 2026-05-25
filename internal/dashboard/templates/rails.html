@@ -1,0 +1,74 @@
+{{define "rails"}}{{template "_head" .}}{{template "_open_body" .}}
+{{$d := .Data}}
+<section class="grid grid-3">
+  <div class="card card-tight">
+    <div class="stat-label">Active rails</div>
+    <div class="stat-num text-brand">{{len $d.Rails}}</div>
+    <div class="stat-sub">incl. terminated</div>
+  </div>
+  <div class="card card-tight">
+    <div class="stat-label">Incoming rate</div>
+    <div class="stat-num text-ok">{{if $d.TotalRatePerEpoch}}{{$d.TotalRatePerEpoch}}{{else}}—{{end}}</div>
+    <div class="stat-sub">USDFC / epoch (~30s)</div>
+  </div>
+  <div class="card card-tight">
+    <div class="stat-label">Settlement cadence</div>
+    <div class="stat-num">10m</div>
+    <div class="stat-sub">PDPv0_PaySettle interval</div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="section-head">
+    <div>
+      <h2>USDFC payment rails</h2>
+      <p>Rails discovered via FilecoinPay.getRailsForPayeeAndToken + last settlement attempt.</p>
+    </div>
+    <span class="pill pill-mute">{{len $d.Rails}} rails</span>
+  </div>
+
+  {{if not $d.Rails}}
+  <div class="empty-state">
+    <p>No rails discovered yet.</p>
+    <p class="hint">Rails appear once a client opens a FilecoinPay rail with this SP as payee.</p>
+  </div>
+  {{else}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Rail</th>
+          <th>Payer</th>
+          <th>Status</th>
+          <th class="right">Rate (USDFC/epoch)</th>
+          <th>Settled up to</th>
+          <th>Last tx</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $d.Rails}}
+        <tr>
+          <td class="mono">{{.RailID}}</td>
+          <td class="mono">{{shortAddr .Payer}}</td>
+          <td>
+            {{if gt .Terminated 0}}
+              <span class="pill pill-fail">terminated @ {{.EndEpoch}}</span>
+            {{else if .LastSettleError.Valid}}
+              <span class="pill pill-warn" title="{{.LastSettleError.String}}">last attempt err</span>
+            {{else if .LastSettleTxHash.Valid}}
+              <span class="pill pill-ok">settled</span>
+            {{else}}
+              <span class="pill pill-info">pending</span>
+            {{end}}
+          </td>
+          <td class="right mono">{{if .PaymentRate}}{{.PaymentRate}}{{else}}<span class="dim">—</span>{{end}}</td>
+          <td class="mono">{{if gt .SettledUpTo 0}}{{.SettledUpTo}}{{else if gt .LastSettledEpoch 0}}{{.LastSettledEpoch}}{{else}}<span class="dim">—</span>{{end}}</td>
+          <td class="mono text-xs">{{if .LastSettleTxHash.Valid}}{{shortHash .LastSettleTxHash.String}}{{else}}<span class="dim">—</span>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</section>
+{{template "_close_body" .}}{{end}}

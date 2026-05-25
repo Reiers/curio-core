@@ -45,6 +45,12 @@ type Handler struct {
 	// /setup or /api/setup once first-run is complete. May be nil;
 	// nil produces a small 404 placeholder.
 	Inner http.Handler
+
+	// DisableFirstRunRedirect, when true, makes /setup discoverable
+	// (via direct nav or a dashboard link) without forcing every
+	// other path to redirect there. Use this when the dashboard is
+	// the primary UI and /setup is just a wizard you visit once.
+	DisableFirstRunRedirect bool
 }
 
 // New constructs a Handler bound to the given state DB.
@@ -84,8 +90,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Not a setup-flow path. If first-run is incomplete, redirect.
-	if st.NeedsSetup {
+	// Not a setup-flow path. If first-run is incomplete and we are
+	// configured to enforce the wizard, redirect. With
+	// DisableFirstRunRedirect set (dashboard-primary deployments),
+	// fall through to Inner.
+	if st.NeedsSetup && !h.DisableFirstRunRedirect {
 		http.Redirect(w, r, "/setup", http.StatusSeeOther)
 		return
 	}
