@@ -18,3 +18,8 @@
 # schema lives in internal/harmonysqlite/schema-curio-core/.
 internal/harmonysqlite/migrations/
 *.bin
+
+# VitePress docs site (docs/) - track sources, ignore build output
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/

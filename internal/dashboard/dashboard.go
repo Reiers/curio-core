@@ -241,13 +241,23 @@ func (s *Server) collectOverview(ctx context.Context) overviewData {
 			NetworkID: s.cfg.Network,
 		},
 	}
-	// chain head — most recent head_epoch from pdp_data_sets +
-	// prev_challenge_request_epoch is a stand-in if a head store
-	// table isn't present.
-	var head sqlNullInt64
-	_ = s.db.QueryRowI(ctx,
-		`SELECT MAX(prev_challenge_request_epoch) FROM pdp_data_sets`).Scan(&head)
-	out.Chain.HeadEpoch = head.Int64
+	// Chain head: read from the embedded Lantern via eth_blockNumber
+	// (returns the Filecoin chain epoch directly on Lantern). Fall
+	// back to MAX(prev_challenge_request_epoch) only if the eth client
+	// is unwired.
+	if s.eth != nil {
+		ctxH, cancel := context.WithTimeout(ctx, 3*time.Second)
+		if n, err := s.eth.BlockNumber(ctxH); err == nil {
+			out.Chain.HeadEpoch = int64(n)
+		}
+		cancel()
+	}
+	if out.Chain.HeadEpoch == 0 {
+		var head sqlNullInt64
+		_ = s.db.QueryRowI(ctx,
+			`SELECT MAX(prev_challenge_request_epoch) FROM pdp_data_sets`).Scan(&head)
+		out.Chain.HeadEpoch = head.Int64
+	}
 
 	var (
 		dsActive, dsTerminated int64
