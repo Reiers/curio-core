@@ -40,6 +40,7 @@ import (
 	"github.com/Reiers/curio-core/internal/ethkeys"
 	"github.com/Reiers/curio-core/internal/parkcomplete"
 	"github.com/Reiers/curio-core/internal/pdpwire"
+	"github.com/Reiers/curio-core/internal/retrieval"
 	"github.com/Reiers/curio-core/internal/setupweb"
 
 	"github.com/filecoin-project/curio/harmony/harmonytask"
@@ -510,6 +511,12 @@ Flags:
 	}
 	admin.Routes(pdpMux, eng.DB(), adminSender)
 	fmt.Printf("  admin:    /admin/test-tx, /admin/eth-key mounted (loopback)\n")
+
+	// Mount /piece/{pieceCid} for HTTP retrieval (PDP read path).
+	// Reads directly from parked_pieces + parked_piece_refs via
+	// localpiecepark, no shared-reader cache (single-node SP shape).
+	retrieval.Routes(pdpMux, eng.DB(), stashDir)
+	fmt.Printf("  retrieval:/piece/{pieceCid} mounted (HTTP Range, ETag, immutable cache)\n")
 
 	handler := pdpwire.FallbackHandler(pdpMux, setupweb.New(eng.DB()))
 	srv := &http.Server{

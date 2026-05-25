@@ -344,7 +344,7 @@ func FallbackHandler(pdpMux *chi.Mux, inner http.Handler) http.Handler {
 }
 
 func isChiPath(p string) bool {
-	return hasPathPrefix(p, "/pdp") || hasPathPrefix(p, "/admin")
+	return hasPathPrefix(p, "/pdp") || hasPathPrefix(p, "/admin") || hasPathPrefix(p, "/piece")
 }
 
 func hasPathPrefix(p, pfx string) bool {
