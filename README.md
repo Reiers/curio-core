@@ -2,7 +2,7 @@
 
 <img src="docs/assets/curio-core-mark-256.png" alt="Curio Core" width="120" />
 
-# CURiO core
+# Curio Core
 
 **A complete Filecoin Onchain Cloud hot-storage provider in a single binary, under 1 GB.**
 
@@ -10,12 +10,15 @@
 
 [![License: Apache 2.0 OR MIT](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](#license)
 [![Pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)](#status)
+[![Docs](https://img.shields.io/badge/docs-curio--core--docs.pages.dev-22BFC4)](https://curio-core-docs.pages.dev/)
 
 </div>
 
 ---
 
-> **Status: pre-alpha.** Built end-to-end (uploads + on-chain signing) on Filecoin Calibration. Mainnet readiness is a Q3 milestone. Tracking: [Curio Core Status Overview](https://github.com/Reiers/curio-core/issues/10).
+> **Status: pre-alpha.** Built end-to-end (uploads + on-chain signing + USDFC settlement + retrieval + dashboard) on Filecoin Calibration. Mainnet readiness is a Q3 milestone. Tracking: [Curio Core Status Overview](https://github.com/Reiers/curio-core/issues/10).
+>
+> **Docs:** <https://curio-core-docs.pages.dev/>
 
 ## What this is
 
@@ -76,15 +79,20 @@ The Lantern half talks to the calibration/mainnet network for chain reads, messa
 
 | Component | Source | Role |
 |---|---|---|
-| **Lantern** | `Reiers/lantern` (in-process library) | Lotus-compatible JSON-RPC backend. Chain head, state reads, eth_*, signing, JWT auth. Bounded VMBridge fallback for FEVM execution today. |
-| **PDP HTTP API** | `Reiers/curio` `pdp/` (PDP-only fork) | Full synapse-sdk wire surface: piece uploads (streaming + CommP-first), data-set creation, addPieces, terminate, retrieval. |
-| **harmonytask scheduler** | same fork | PDP task lifecycle: proof generation, NextPP, NotifyTask, SendTransaction, PullPiece, settlement watcher. |
+| **Lantern** | `Reiers/lantern` (in-process library) | Lotus-compatible JSON-RPC backend. Chain head, state reads, eth_*, signing, JWT auth. Bounded VMBridge fallback for FEVM execution. |
+| **PDP HTTP API** | `Reiers/curio` `pdp/` (PDP-only fork) | Full synapse-sdk wire surface: piece uploads (streaming), data-set creation, addPieces, terminate, retrieval. |
+| **harmonytask scheduler** | same fork | PDP task lifecycle: proof generation, NextPP, NotifyTask, SendTransaction, PullPiece. |
 | **harmonysqlite** | this repo `internal/harmonysqlite` | SQLite-backed `harmonyquery.DBInterface` implementation. Replaces Yugabyte/Postgres without changing upstream code. |
+| **payments** | this repo `internal/payments` | Singleton harmonytask `PDPv0_PaySettle`: USDFC rail discovery via `FilecoinPay.getRailsForPayeeAndToken` + `settleRail` dispatch every 10 minutes. |
+| **retrieval** | this repo `internal/retrieval` | `GET /piece/{cid}` HTTP read path with HTTP Range, ETag, immutable cache. Reads from `parked_pieces` + `parked_piece_refs` via `localpiecepark`. |
+| **dashboard** | this repo `internal/dashboard` | Operator + client WebUI: chain head, datasets, USDFC rails, scheduler health, wallets, storage, upload, embedded terminal. Dark-mode, server-rendered, zero JS framework. |
 | **diskstash** | this repo `internal/diskstash` | Local-disk `paths.StashStore` implementation for the piece upload pipeline. |
+| **localpiecepark** | this repo `internal/localpiecepark` | Local piece-byte reader implementing `pieceprovider.PieceParkBackend`. |
+| **parkcomplete** | this repo `internal/parkcomplete` | Bridge task that flips `parked_pieces.complete=1` when streaming-upload bytes land. |
 | **nodeapi + ethclient** | this repo `internal/nodeapi`, `internal/ethclient` | Dial embedded Lantern over `/rpc/v1` with self-minted admin JWT. Standard Lotus + go-ethereum client surfaces, in-process. |
-| **ethkeys** | this repo `internal/ethkeys` | Auto-generate or import a calibration/mainnet wallet at boot. Persist in SQLite. |
-| **WebUI** | upstream curio `web/` (pdpv0-stripped) | Operator dashboard. Real-time SP state, payments, datasets, alerts. (Day 9+.) |
-| **admin endpoints** | this repo `internal/admin` | `/admin/test-tx`, `/admin/eth-key`, etc. — loopback-only operator hooks. |
+| **ethkeys + wallet** | this repo `internal/ethkeys`, `internal/wallet` | Auto-generate or import a calibration/mainnet wallet at boot. Persist in SQLite. Full operator CLI: list, new, import, export, role, delete, send (FIL + USDFC). |
+| **admin endpoints** | this repo `internal/admin` | `/admin/test-tx`, `/admin/eth-key`, `/admin/alerts/*` — loopback-only operator hooks. |
+| **setupweb** | this repo `internal/setupweb` | `/setup` first-run wizard for the three required SP identifiers. |
 
 ## Hot storage, not cold
 
@@ -140,20 +148,22 @@ client calls POST /pdp/data-sets/create-and-add
 
 | Capability | State |
 |---|---|
-| Embedded Lantern (calibration + mainnet) | ✅ shipped (V1.4) |
-| `/pdp/piece/uploads` streaming + `/pdp/piece` CommP-first | ✅ streaming live; CommP-first ⏳ schema port |
-| SQLite-backed harmonytask scheduler | ✅ shipped, with one [time-column scan blocker](https://github.com/Reiers/curio-core/issues/17) for the SendTaskETH path |
-| Real on-chain tx via embedded Lantern | ✅ shipped (calibration block 3,741,096; viem path) |
-| PDPService → SenderETH harmonytask broadcast | ⏳ blocked on #17 |
+| Embedded Lantern (calibration + mainnet) | ✅ shipped (v1.5.x) |
+| `/pdp/piece/uploads` streaming pipeline | ✅ live, end-to-end on cc-smoke |
+| SQLite-backed harmonytask scheduler | ✅ shipped (`harmonyquery.DBInterface` seam) |
+| Real on-chain tx via embedded Lantern | ✅ shipped (8 successful prove cycles overnight 2026-05-25) |
+| PDPService → SenderETH harmonytask broadcast | ✅ shipped |
+| PDPv0 PullPiece refactor (upstream PR #1245) | ✅ adopted ([#24](https://github.com/Reiers/curio-core/issues/24)) |
 | Auto-generated `eth_keys` wallet | ✅ shipped |
-| VMBridge for FEVM forwarding (12 eth_* methods) | ✅ shipped (calibration/mainnet Glif defaults) |
-| Wallet management CLI (list/new/import/export/role/delete) | ✅ shipped (send deferred behind #17) |
-| Doctor CLI (DB ↔ on-chain reconciliation, observe-only) | ✅ shipped ([#41](https://github.com/Reiers/curio-core/issues/41) closed) |
-| SP Registry CLI (`sp info` + `sp register --dry-run`) | ✅ read + draft live; broadcast deferred behind #17 |
-| PDPVerifier v3.4.0 ABI | ✅ shipped (forward-compatible) |
-| HTTP retrieval (`/piece/{cid}`) | ⏳ [#36](https://github.com/Reiers/curio-core/issues/36) |
-| USDFC payment receiver + rail settlement | ⏳ [#37](https://github.com/Reiers/curio-core/issues/37) |
-| Operator dashboard | ⏳ [#39](https://github.com/Reiers/curio-core/issues/39) |
+| VMBridge for FEVM forwarding | ✅ shipped (calibration/mainnet Glif defaults) |
+| Wallet management CLI (list/new/import/export/role/delete/send) | ✅ shipped — FIL + USDFC sends verified live ([#40](https://github.com/Reiers/curio-core/issues/40)) |
+| Doctor CLI (DB ↔ on-chain reconciliation, observe-only) | ✅ shipped ([#41](https://github.com/Reiers/curio-core/issues/41)) |
+| SP Registry CLI (`sp info` + `sp register`) | ✅ shipped |
+| PDPVerifier v3.4.0 ABI + 0.1 FIL cleanup deposit handling | ✅ shipped ([#63](https://github.com/Reiers/curio-core/issues/63)) |
+| HTTP retrieval (`/piece/{cid}`) | ✅ shipped ([#36](https://github.com/Reiers/curio-core/issues/36)) — Range, ETag, 1.2 GB/s aggregate |
+| USDFC payment receiver + rail settlement | ✅ shipped ([#37](https://github.com/Reiers/curio-core/issues/37)) — 5 on-chain settles confirmed |
+| Operator dashboard (premium WebUI) | ✅ first cut shipped ([#39](https://github.com/Reiers/curio-core/issues/39)) — iterating |
+| Documentation site | ✅ live at [curio-core-docs.pages.dev](https://curio-core-docs.pages.dev/) ([#66](https://github.com/Reiers/curio-core/issues/66)) |
 | IPNI provider | ⏳ [#42](https://github.com/Reiers/curio-core/issues/42) |
 | Session Key Registry | ⏳ [#44](https://github.com/Reiers/curio-core/issues/44) |
 | synapse-sdk compat test suite | ⏳ [#46](https://github.com/Reiers/curio-core/issues/46) |
@@ -202,18 +212,37 @@ curio-core run: starting daemon
   network:  calibration
   db-path:  /home/op/.curio-core/state.sqlite
   listen:   127.0.0.1:14994
-  lantern:  anchored at epoch 3741128
-  lantern:  rpc at http://127.0.0.1:39055/rpc/v1 (in-process)
+  lantern:  anchored at epoch 3745971
+  lantern:  rpc at http://127.0.0.1:41763/rpc/v1 (in-process)
   lantern:  vm-bridge -> https://api.calibration.node.glif.io/rpc/v1
-  eth_keys: 0x6b4758baAcE34519F4977A30f6bEcd473249833c (role=pdp)
-  engine:   8 live task impls, 9 descriptor entries
+  eth_keys: 0xf73Aa7b26Cd1fd30A7D5039842E13A8C7344CfEe (role=pdp)
+  payments: USDFC rail settler active (every 10m0s, payee=0xf73Aa7b26...)
+  engine:   10 live task impls, 11 descriptor entries
   watchers: pdpv0 dataset/terminate/delete handlers wired on tipset sub
   parkcomplete: streaming-upload -> parked_pieces.complete bridge active
-  msg-watch: message_waits_eth pending-tx poller active
+  alerts:   /admin/alerts active (task-history poller, 30s interval)
   pdp:      /pdp/* routes mounted (stash /home/op/.curio-core/stash)
   admin:    /admin/test-tx, /admin/eth-key mounted (loopback)
-  webui:    http://127.0.0.1:14994/
+  retrieval:/piece/{pieceCid} mounted (HTTP Range, ETag, immutable cache)
+  dashboard:/, /wallets, /datasets, /rails, /tasks, /alerts mounted (Curio Core branded)
 ```
+
+### Operator dashboard
+
+A full operator dashboard ships in the binary at `http://127.0.0.1:14994/`:
+
+- **Overview** — chain head, dataset count, pieces stored, active rails, 24h proof stats, scheduler health
+- **Wallets** — live tFIL + USDFC balances, FIL/USDFC send form
+- **Datasets** — active client storage with proof status
+- **Rails (USDFC)** — per-rail payment rate, total incoming USDFC/epoch, last `settleRail` tx
+- **Tasks** — active queue + last 50 history rows
+- **Storage** — piece count, logical bytes, physical stash-dir disk usage
+- **Upload** — client-facing 2-phase streaming upload with XHR progress bar
+- **Terminal** — allowlisted curio-core CLI runner (`version`, `wallet list`, `doctor`, `sp info`, `probe`, `config show`)
+
+Loopback-only by design. Access via SSH tunnel: `ssh -L 14994:127.0.0.1:14994 your-sp-host`.
+
+See the [dashboard tour](https://curio-core-docs.pages.dev/operating/dashboard) in the docs for the full walkthrough.
 
 ### Upload a piece
 
@@ -244,33 +273,40 @@ curl -X POST http://127.0.0.1:14994/admin/test-tx -d '{}'
 ## Roadmap
 
 **Phase 1 — Foundations (done)**
-- ✅ Lantern V1 minimal node (40 MB, pure Go, calibration + mainnet)
+- ✅ Lantern V1 minimal node (~40 MB, pure Go, calibration + mainnet)
 - ✅ Pdpv0-only fork of upstream Curio
 - ✅ Full SQLite port of the harmonytask + PDP schema
 - ✅ Embedded Lantern with self-minted JWT, /rpc/v1 in-process
 - ✅ Upload pipeline: client → curio-core → disk + SQLite, byte-identical
-- ✅ Sign + broadcast on-chain via embedded Lantern, real receipt
+- ✅ Sign + broadcast on-chain via embedded Lantern, real receipts
 
-**Phase 2 — Hot Storage SP product (in progress)**
-- ⏳ HTTP retrieval gateway (#36)
-- ⏳ FilecoinPay rail settlement (#37)
-- ⏳ SP Registry registration (#38)
-- ⏳ Operator dashboard (#39)
-- ⏳ Wallet management (#40)
-- ⏳ Doctor reconciliation (#41)
-- ⏳ IPNI announcer (#42)
-- ⏳ synapse-sdk compat test suite (#46)
+**Phase 2 — Hot Storage SP product (done)**
+- ✅ HTTP retrieval gateway ([#36](https://github.com/Reiers/curio-core/issues/36))
+- ✅ FilecoinPay rail settlement ([#37](https://github.com/Reiers/curio-core/issues/37))
+- ✅ SP Registry registration
+- ✅ Operator dashboard, first cut ([#39](https://github.com/Reiers/curio-core/issues/39))
+- ✅ Wallet management with FIL + USDFC send ([#40](https://github.com/Reiers/curio-core/issues/40))
+- ✅ Doctor reconciliation ([#41](https://github.com/Reiers/curio-core/issues/41))
+- ✅ Upstream PR #1245 PullPiece refactor adopted ([#24](https://github.com/Reiers/curio-core/issues/24))
+- ✅ PDPVerifier v3.4.0 cleanup-deposit handling ([#63](https://github.com/Reiers/curio-core/issues/63))
+- ✅ Documentation site ([#66](https://github.com/Reiers/curio-core/issues/66))
 
-**Phase 3 — Polish (after Phase 2 ships)**
-- Multi-piece delete (#43)
-- Session Key Registry (#44)
-- Per-operation fee structure (#45)
-- Adopt upstream alerts wiring (#48)
-- Aggregate root retrieval (#49)
-- Client-side CLI shipped in same binary (#52)
+**Phase 3 — Polish (in progress)**
+- ⏳ Dashboard iteration: USDFC sends in-browser, wallet new/import flows, low-balance alerts
+- ⏳ IPNI announcer ([#42](https://github.com/Reiers/curio-core/issues/42))
+- ⏳ synapse-sdk compat test suite ([#46](https://github.com/Reiers/curio-core/issues/46))
+- ⏳ Multi-piece delete ([#43](https://github.com/Reiers/curio-core/issues/43))
+- ⏳ Session Key Registry ([#44](https://github.com/Reiers/curio-core/issues/44))
+- ⏳ Per-operation fee structure ([#45](https://github.com/Reiers/curio-core/issues/45))
+- ⏳ Aggregate root retrieval ([#49](https://github.com/Reiers/curio-core/issues/49))
+- ⏳ Client-side CLI shipped in same binary ([#52](https://github.com/Reiers/curio-core/issues/52))
 
-**Phase 4 — Beyond**
-- TBD based on operator feedback. Probable directions: multi-wallet workflows, payment auction support, region-aware client steering.
+**Phase 4 — Mainnet readiness (Q3 2026)**
+- Mainnet bootstrap quorum for Lantern
+- Production auth layer for the dashboard (today: loopback only)
+- Operator runbook for the first paid client
+- Live `pdp_data_sets` row-state drift fix ([#65](https://github.com/Reiers/curio-core/issues/65))
+- TBD based on operator feedback.
 
 ## Differentiators
 
