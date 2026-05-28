@@ -12,6 +12,8 @@
 [![Pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)](#status)
 [![Docs](https://img.shields.io/badge/docs-curio--core--docs.pages.dev-22BFC4)](https://curio-core-docs.pages.dev/)
 
+Website: **[curiocore.io](https://curiocore.io)** · Chain backend: **[golantern.io](https://golantern.io)**
+
 </div>
 
 ---
@@ -360,6 +362,17 @@ If a PR pushes the binary over 100 MB, that's a deliberate decision documented i
 Mark and wordmark are derived from the parent Curio brand: the original is a layered isometric cube with a teal accent slit; Curio Core reduces to a single rhombus (the front face) with a teal dot at the geometric center (literally "the core"). Same teal accent `#22BFC4` carried through to the wordmark's lowercase `i`.
 
 Assets live in [`docs/assets/`](docs/assets/).
+
+## Advisors
+
+Curio Core's scope, task carve-out, and overall architecture have benefited from technical advisory from the [Curio](https://github.com/filecoin-project/curio) core team:
+
+- **[LexLuthr](https://github.com/LexLuthr)** — Curio core team. Reviewed Lantern's chain-node architecture ([Lantern#10](https://github.com/Reiers/lantern/issues/10)), which informed Curio Core's embedded-chain design.
+- **[Andrew Jackson / @snadrus](https://github.com/snadrus)** — Curio core team. Bundle-architecture design ([Lantern#11](https://github.com/Reiers/lantern/issues/11)), SQLite-portable DB-seam approach, docs review ([#66](https://github.com/Reiers/curio-core/issues/66)).
+
+Advisor roles are non-binding; views and code in this repository are the author's responsibility.
+
+---
 
 ## License
 
