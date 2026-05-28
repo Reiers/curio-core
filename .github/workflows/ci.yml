@@ -31,22 +31,29 @@ jobs:
             git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
           fi
 
+      # We constrain `vet/build/test` to the directories curio-core actually
+      # compiles. `./...` walks transitive packages including the upstream
+      # curio fork's `tasks/sealsupra` (which has CGO LDFLAGS for the sealing
+      # SupraSeal kernel) and `filecoin-ffi` cgo — neither is reachable from
+      # curio-core's import graph, but `go vet` doesn't know that. The
+      # canonical curio-core build target is `./cmd/curio-core` only.
       - name: go vet
         env:
+          CGO_ENABLED: '0'
           GOPRIVATE: github.com/Reiers/*
-        run: go vet ./...
+        run: go vet ./cmd/... ./internal/...
 
       - name: go build
         env:
           CGO_ENABLED: '0'
           GOPRIVATE: github.com/Reiers/*
-        run: go build ./...
+        run: go build ./cmd/...
 
       - name: go test
         env:
           CGO_ENABLED: '1' # race detector
           GOPRIVATE: github.com/Reiers/*
-        run: go test -race -timeout 5m ./...
+        run: go test -race -timeout 5m ./cmd/... ./internal/...
 
       - name: gofmt
         run: |
