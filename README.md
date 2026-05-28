@@ -18,9 +18,25 @@ Website: **[curiocore.io](https://curiocore.io)** · Chain backend: **[golantern
 
 ---
 
-> **Status: pre-alpha.** Built end-to-end (uploads + on-chain signing + USDFC settlement + retrieval + dashboard) on Filecoin Calibration. Mainnet readiness is a Q3 milestone. Tracking: [Curio Core Status Overview](https://github.com/Reiers/curio-core/issues/10).
->
-> **Docs:** <https://curio-core-docs.pages.dev/>
+## TL;DR
+
+Curio Core is a Filecoin Onchain Cloud **hot-storage SP, in one static Go binary**. PDP task pipeline, payments, IPNI, operator+client WebUI, and an embedded Lantern chain node, all in a single ~90 MB process. **CGO_ENABLED=0**. No `filecoin-ffi`. No Rust toolchain. No Yugabyte cluster. No Lotus sidecar.
+
+**Pre-alpha, proven on calibration today.** The full PDP proof loop is self-sustaining: deal accept → piece park → proof submit → USDFC settle, on a schedule, signed by the binary itself.
+
+| | |
+|---|---|
+| Dataset on calibration | **#13977** (FilOzone) |
+| Provider ID | **26** (self-registered) |
+| Successful prove cycles overnight 2026-05-25 | **8 / 8** |
+| USDFC settle txs confirmed on-chain | **5** |
+| First on-chain tx | calibration block **3,742,933** |
+| First prove tx | `0x8dae0bab…1a02d` (`tx_success=1`) |
+| Binary size (linux/amd64, no CGo) | **~90 MB** |
+| Process RSS at idle | **~55 MB** |
+| SQLite state.sqlite | **~2 MB** |
+
+> **Status:** pre-alpha. Mainnet readiness is a Q3 milestone. Live tracking: [Curio Core Status Overview](https://github.com/Reiers/curio-core/issues/10). Docs: <https://curio-core-docs.pages.dev/>.
 
 ## What this is
 
