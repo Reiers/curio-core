@@ -169,10 +169,13 @@ func cmdProbe(args []string) error {
 	}
 
 	d, err := lantern.New(lantern.Config{
-		DataDir:      *dataDir,
-		Wallet:       w,
-		Gateway:      *gateway,
-		Network:      *network,
+		DataDir: *dataDir,
+		Wallet:  w,
+		Gateway: *gateway,
+		Network: *network,
+		// Probe is short-lived + read-only: polling head is fine, no
+		// reason to mount a libp2p host (curio-core#74 keeps gossipsub
+		// for the long-running daemon only).
 		NoLibp2p:     true,
 		EmbeddedMode: true,
 	})
@@ -253,6 +256,8 @@ func cmdRun(args []string) error {
 	vmBridgeRPC := fs.String("vm-bridge-rpc", "", "Upstream Forest/Lotus JSON-RPC URL for FEVM forwarding (eth_call/eth_estimateGas/sendRawTransaction). Defaults per --network: calibration -> https://api.calibration.node.glif.io/rpc/v1, mainnet -> https://api.node.glif.io/rpc/v1. Pass an empty string with --vm-bridge-rpc-disable to disable.")
 	vmBridgeToken := fs.String("vm-bridge-token", "", "Optional Bearer token for the VM bridge upstream (defaults to env LANTERN_VM_BRIDGE_TOKEN)")
 	vmBridgeDisable := fs.Bool("vm-bridge-rpc-disable", false, "Disable VM bridge entirely (eth_call et al. will return 'FEVM method requires --vm-bridge-rpc'). Use only when curio-core is being driven by a flow that doesn't read contract state.")
+	noLibp2p := fs.Bool("no-libp2p", false, "Disable the embedded Lantern libp2p host (gossipsub head-tracking). Head-following falls back to gateway polling only. Use on hosts where outbound p2p is blocked or unwanted.")
+	p2pListen := fs.String("p2p-listen", "", "Comma-separated libp2p listen multiaddrs for gossipsub head-tracking (default: /ip4/0.0.0.0/tcp/0,/ip4/0.0.0.0/udp/0/quic-v1)")
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, `Usage: curio-core run [flags]
 
@@ -347,8 +352,15 @@ Flags:
 			// upstream PDPService that itself talks to Lantern through this
 			// loopback. Port 0 avoids conflicts with a real standalone
 			// Lantern on the same host.
-			RPCListen:     "127.0.0.1:0",
-			NoLibp2p:      true,
+			RPCListen: "127.0.0.1:0",
+			// Gossipsub head-tracking ON by default for the long-running
+			// daemon (curio-core#74). The libp2p host + DHT + block ingestor
+			// track head over /fil/blocks/<network> at 0-1 epoch latency;
+			// the polling Sync drops to a relaxed 30s catch-up fallback.
+			// This closes the head-staleness class behind curio-core#62
+			// (lantern#33/#40). Opt out with --no-libp2p.
+			NoLibp2p:      *noLibp2p,
+			P2PListen:     *p2pListen,
 			EmbeddedMode:  true,
 			VMBridgeRPC:   bridgeURL,
 			VMBridgeToken: *vmBridgeToken,
@@ -383,6 +395,11 @@ Flags:
 		}
 		if bridgeURL != "" {
 			fmt.Printf("  lantern:  vm-bridge -> %s\n", bridgeURL)
+		}
+		if _, ok := lanternDaemon.GossipStats(); ok {
+			fmt.Printf("  lantern:  gossipsub head-tracking ON (/fil/blocks/%s; polling sync relaxed to catch-up fallback)\n", *network)
+		} else {
+			fmt.Printf("  lantern:  gossipsub head-tracking OFF (gateway polling only)\n")
 		}
 	} else {
 		fmt.Printf("  lantern:  skipped (--no-lantern)\n")
