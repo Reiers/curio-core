@@ -411,11 +411,14 @@ func bootLanternForRead(ctx context.Context, dataDir, network, gateway, vmBridge
 	}
 
 	d, err := lantern.New(lantern.Config{
-		DataDir:      dataDir,
-		Wallet:       w,
-		Gateway:      gateway,
-		Network:      network,
-		RPCListen:    "127.0.0.1:0",
+		DataDir:   dataDir,
+		Wallet:    w,
+		Gateway:   gateway,
+		Network:   network,
+		RPCListen: "127.0.0.1:0",
+		// sp/doctor are short-lived read paths: polling head is fine,
+		// no libp2p host wanted here (curio-core#74 scopes gossipsub
+		// to the long-running `run` daemon only).
 		NoLibp2p:     true,
 		EmbeddedMode: true,
 		VMBridgeRPC:  bridgeURL,
