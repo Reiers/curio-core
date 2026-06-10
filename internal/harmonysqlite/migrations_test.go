@@ -168,9 +168,10 @@ func TestApplyMigrations_PDPTablesPresent(t *testing.T) {
 		"sector_location", "storage_path",
 		// Eth chain queue
 		"eth_keys", "message_sends_eth", "message_waits_eth", "message_send_eth_locks",
-		// PDP v1
+		// PDP v1 (legacy pdp_proof_sets / pdp_proofset_* vocabulary was
+		// renamed to pdp_data_sets / pdp_data_set_* and the old tables are
+		// DROPPED by 0017_drop_legacy_v1_artifacts.sql — asserted absent below)
 		"pdp_services", "pdp_piecerefs", "pdp_piece_uploads", "pdp_piece_mh_to_commp",
-		"pdp_proof_sets", "pdp_proofset_creates", "pdp_proofset_roots", "pdp_proofset_root_adds",
 		"pdp_prove_tasks",
 		// PDP v0 (renamed vocabulary)
 		"pdp_data_sets", "pdp_data_set_creates", "pdp_data_set_pieces", "pdp_data_set_piece_adds",
@@ -188,6 +189,21 @@ func TestApplyMigrations_PDPTablesPresent(t *testing.T) {
 				`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, tbl).Scan(&got)
 			if err != nil {
 				t.Errorf("table %s missing: %v", tbl, err)
+			}
+		})
+	}
+
+	// Legacy v1 vocabulary must be GONE after 0017_drop_legacy_v1_artifacts.
+	droppedTables := []string{
+		"pdp_proof_sets", "pdp_proofset_creates", "pdp_proofset_roots", "pdp_proofset_root_adds",
+	}
+	for _, tbl := range droppedTables {
+		t.Run("dropped/"+tbl, func(t *testing.T) {
+			var got string
+			err := db.QueryRow(ctx,
+				`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, tbl).Scan(&got)
+			if err == nil {
+				t.Errorf("legacy table %s still present; 0017 should have dropped it", tbl)
 			}
 		})
 	}
@@ -288,5 +304,55 @@ func TestApplyMigrations_FKEnforced(t *testing.T) {
 		// SQLite returns "FOREIGN KEY constraint failed"; some build options
 		// may phrase it differently. Accept any error pointing at constraints.
 		t.Logf("FK violation (formatted): %v", err)
+	}
+}
+
+// TestApplyMigrations_TaskCompletionDeleteWorks reproduces the live
+// failure behind migration 0022: harmonytask's completion recorder does
+// DELETE FROM harmony_task WHERE id=$1, and with foreign_keys=ON SQLite
+// scans every table whose FK references harmony_task. When 0017 dropped
+// pdp_proof_sets but left pdp_prove_tasks declaring
+// REFERENCES pdp_proof_sets(id), that scan failed with
+// "no such table: main.pdp_proof_sets" and EVERY task completion
+// retried forever. This test fails if any FK in the schema dangles.
+func TestApplyMigrations_TaskCompletionDeleteWorks(t *testing.T) {
+	db, err := Open(Config{Path: ":memory:", ForeignKeys: true})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := db.ApplyMigrations(ctx); err != nil {
+		t.Fatalf("ApplyMigrations: %v", err)
+	}
+
+	// foreign_key_check catches dangling FK targets schema-wide.
+	rows, err := db.Query(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		t.Fatalf("PRAGMA foreign_key_check errored (dangling FK table?): %v", err)
+	}
+	rows.Close()
+
+	// And the actual harmonytask completion path: insert a task with no
+	// owner, then DELETE it. The DELETE triggers FK-cascade scans across
+	// all referencing tables (pdp_prove_tasks among them).
+	var taskID int64
+	err = db.QueryRow(ctx,
+		`INSERT INTO harmony_task (posted_time, added_by, name)
+		 VALUES (CURRENT_TIMESTAMP, 1, 'completion-test') RETURNING id`).Scan(&taskID)
+	if err != nil {
+		t.Fatalf("insert harmony_task: %v", err)
+	}
+	if _, err := db.ExecCount(ctx, `DELETE FROM harmony_task WHERE id=?`, taskID); err != nil {
+		t.Fatalf("DELETE FROM harmony_task failed (this is the 0022 bug class): %v", err)
+	}
+
+	// pdp_prove_tasks must be in the v0 shape: (data_set, task_id),
+	// FK'd to pdp_data_sets, so task_prove.go's INSERT works.
+	var colName string
+	err = db.QueryRow(ctx,
+		`SELECT name FROM pragma_table_info('pdp_prove_tasks') WHERE name='data_set'`).Scan(&colName)
+	if err != nil {
+		t.Errorf("pdp_prove_tasks.data_set column missing (still v1 'proofset' shape?): %v", err)
 	}
 }
