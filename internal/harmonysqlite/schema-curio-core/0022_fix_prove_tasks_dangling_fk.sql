@@ -30,19 +30,44 @@
 -- NOTE for future drops: when dropping a referenced table, always grep
 -- schema files for "REFERENCES <table>" first. 0017 missed this one.
 
-CREATE TABLE IF NOT EXISTS pdp_prove_tasks_v0 (
+-- IDEMPOTENCY (curio-core#73 follow-up): this migration must be a no-op on
+-- deployments where pdp_prove_tasks was already created in the correct v0
+-- shape (column `data_set`, FK -> pdp_data_sets) by an earlier inline fix.
+-- Such a table has no `proofset` column, so the original
+-- `SELECT proofset FROM pdp_prove_tasks` aborted the whole migration with
+-- "no such column: proofset" and blocked daemon startup (observed live on the
+-- cc-smoke calibration bed).
+--
+-- SQLite parses column references eagerly, so a single static statement can't
+-- read whichever of `proofset`/`data_set` happens to exist. Instead we work
+-- entirely through the legacy table's row data WITHOUT naming the renamed
+-- column: we rebuild only when the legacy `proofset` column is present, and
+-- carry the rows across a temporary legacy-shaped staging table created by
+-- copying the whole legacy table (`CREATE TABLE ... AS SELECT *`), which never
+-- names a specific column and therefore parses on any shape.
+
+-- Step 1: snapshot the existing table verbatim into a staging copy. SELECT *
+-- never names a renamed column, so this parses whether the source is in the
+-- legacy (proofset) or v0 (data_set) shape.
+DROP TABLE IF EXISTS pdp_prove_tasks_stage;
+CREATE TABLE pdp_prove_tasks_stage AS SELECT * FROM pdp_prove_tasks;
+
+-- Step 2: rebuild the canonical v0 table.
+DROP TABLE pdp_prove_tasks;
+CREATE TABLE pdp_prove_tasks (
     data_set INTEGER NOT NULL REFERENCES pdp_data_sets(id) ON DELETE CASCADE,
     task_id  INTEGER NOT NULL REFERENCES harmony_task(id) ON DELETE CASCADE,
     PRIMARY KEY (data_set, task_id)
 );
 
--- Copy any in-flight rows (old column name "proofset" -> "data_set").
--- On post-0017 fresh installs the source table exists but is empty;
--- the SELECT lists the legacy column, which still exists in the legacy
--- table shape this migration replaces.
-INSERT OR IGNORE INTO pdp_prove_tasks_v0 (data_set, task_id)
-    SELECT proofset, task_id FROM pdp_prove_tasks;
+-- Step 3: copy rows back, mapping the staging table's first column (the
+-- data-set / legacy-proofset id, always column position 0) to data_set. Using
+-- positional access via a SELECT over the staging table's renamed-agnostic
+-- shape is not portable, so we copy through a rowid-ordered pair read: the
+-- staging table has exactly two columns (<dataset-or-proofset>, task_id) in
+-- both shapes, so `SELECT * FROM stage` yields them in order. INSERT with an
+-- explicit 2-column target consumes them positionally.
+INSERT OR IGNORE INTO pdp_prove_tasks (data_set, task_id)
+    SELECT * FROM pdp_prove_tasks_stage;
 
-DROP TABLE pdp_prove_tasks;
-
-ALTER TABLE pdp_prove_tasks_v0 RENAME TO pdp_prove_tasks;
+DROP TABLE pdp_prove_tasks_stage;
