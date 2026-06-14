@@ -97,6 +97,11 @@ type Engine struct {
 	chainSchedCancel context.CancelFunc
 	chainSchedDone   chan struct{}
 
+	// machineKeepaliveStop signals the harmony_machines heartbeat
+	// goroutine to exit. Closed in Stop. See startMachineKeepalive.
+	machineKeepaliveStop chan struct{}
+	machineKeepaliveDone chan struct{}
+
 	startedAt atomic.Value // time.Time, optional, zero until Start()
 	running   atomic.Bool
 
@@ -198,6 +203,24 @@ func (e *Engine) Start(ctx context.Context, extraTasks ...harmonytask.TaskInterf
 		e.running.Store(false)
 		return fmt.Errorf("engine: record machine row: %w", err)
 	}
+
+	// Start the harmony_machines keepalive. CRITICAL (curio-core#76):
+	// the scheduler runs resources.CleanupMachines() periodically
+	// (scheduler.go:95), which DELETEs any harmony_machines row whose
+	// last_contact is older than LOOKS_DEAD_TIMEOUT (10m). Upstream's
+	// keepalive that refreshes last_contact lives in
+	// resources.RegisterWithResources -- which we deliberately bypass
+	// (its upsert + keepalive UPDATE use Postgres $N placeholders that
+	// SQLite can't bind). Without our own keepalive, the machine row we
+	// insert at boot goes stale after 10m, CleanupMachines reaps it, the
+	// FK harmony_task.owner_id -> harmony_machines(id) cascades owner_id
+	// to NULL, and every task claim then fails with
+	// "FOREIGN KEY constraint failed" (owner_id set to a now-missing
+	// machine id) while checkNodeFlags returns "sql: no rows in result
+	// set". Net effect: the daemon proves existing datasets fine but
+	// silently stops dispatching NEW work (e.g. createDataSet sends) ~10m
+	// after boot. Refresh every minute, matching upstream's cadence.
+	e.startMachineKeepalive(machineID)
 
 	// Wire the harmonytask scheduler against our SQLite-backed
 	// *harmonysqlite.DB. The DB satisfies harmonyquery.DBInterface via the
@@ -312,6 +335,52 @@ func (e *Engine) recordMachineRow(ctx context.Context) (int, error) {
 	return id, nil
 }
 
+// startMachineKeepalive launches the background goroutine that refreshes
+// harmony_machines.last_contact for this node's row every minute, so the
+// scheduler's CleanupMachines reaper never deletes a live node out from
+// under the harmony_task.owner_id FK. See the call site in Start for the
+// full failure-mode rationale (curio-core#76).
+//
+// If the row is ever found missing (e.g. a clock skew or a manual DELETE
+// let the reaper win a race), we re-insert it so the node self-heals
+// instead of wedging permanently.
+func (e *Engine) startMachineKeepalive(machineID int) {
+	e.machineKeepaliveStop = make(chan struct{})
+	e.machineKeepaliveDone = make(chan struct{})
+	go func() {
+		defer close(e.machineKeepaliveDone)
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-e.machineKeepaliveStop:
+				return
+			case <-ticker.C:
+				kaCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				res, err := e.db.Exec(kaCtx,
+					`UPDATE harmony_machines SET last_contact = CURRENT_TIMESTAMP WHERE id = ?`,
+					machineID)
+				if err == nil {
+					if n, _ := res.RowsAffected(); n == 0 {
+						// Row was reaped; self-heal by re-recording it.
+						// recordMachineRow is UPDATE-first/INSERT-if-zero
+						// and keyed by host_and_port, so this restores a
+						// row (possibly with a new id; the scheduler's
+						// ownerID is fixed for the process lifetime, so we
+						// keep refreshing THIS machineID's row by id and
+						// only re-insert to avoid a permanently dead node).
+						_, _ = e.db.Exec(kaCtx,
+							`INSERT OR IGNORE INTO harmony_machines (id, host_and_port, cpu, ram, gpu, last_contact)
+							 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+							machineID, e.cfg.HostAndPort, 1, int64(1<<30), 0)
+					}
+				}
+				cancel()
+			}
+		}
+	}()
+}
+
 // te holds the harmonytask engine when running. nil before Start /
 // after Stop.
 // (declared as a field via the existing Engine struct further up.)
@@ -341,6 +410,18 @@ func (e *Engine) Stop() error {
 		}
 		e.chainSchedCancel = nil
 		e.chainSchedDone = nil
+	}
+
+	// Stop the machine keepalive before tearing down the engine so it
+	// can't race a final UPDATE against a closing DB handle.
+	if e.machineKeepaliveStop != nil {
+		close(e.machineKeepaliveStop)
+		select {
+		case <-e.machineKeepaliveDone:
+		case <-time.After(2 * time.Second):
+		}
+		e.machineKeepaliveStop = nil
+		e.machineKeepaliveDone = nil
 	}
 
 	if e.te != nil {
