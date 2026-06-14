@@ -52,7 +52,11 @@ Common causes:
 **Symptom:** Tasks page shows an unowned task that's been sitting for several
 minutes while other tasks complete.
 
-**Cause:** Task's declared `Cost.RAM` exceeds the engine budget.
+**Cause 1:** Task's declared `Cost.RAM` exceeds the engine budget.
+
+> If *all* new tasks (not just heavy ones) stop being claimed ~10 minutes after
+> boot and you see `FOREIGN KEY constraint failed`, that's a different bug — see
+> [New work stops dispatching ~10 minutes after boot](#new-work-stops-dispatching-10-minutes-after-boot).
 
 **Check the log** — curio-core emits a `WARN` line:
 
@@ -69,6 +73,36 @@ sudo systemctl edit curio-core
 # Change ExecStart to include: --engine-ram 8GiB
 sudo systemctl restart curio-core
 ```
+
+## New work stops dispatching ~10 minutes after boot
+
+**Symptom:** The daemon starts fine and keeps proving existing datasets, but any
+**new** action silently stalls after the node has been up for ~10 minutes. A
+`createDataSet` hangs at `POST /pdp/data-sets`; new uploads sit unprocessed. The
+log fills with:
+
+```
+ERROR harmonytask task_type_handler.go ... constraint failed: FOREIGN KEY constraint failed
+ERROR harmonytask scheduler.go ... failed to check node flags  {"error": "sql: no rows in result set"}
+```
+
+**Cause:** The scheduler periodically reaps `harmony_machines` rows whose
+`last_contact` is older than 10 minutes (`LOOKS_DEAD_TIMEOUT`). On affected builds
+the per-node keepalive that refreshes `last_contact` never ran, so the node's own
+machine row got reaped out from under the `harmony_task.owner_id` foreign key —
+after which no task can be claimed.
+
+**Check:**
+
+```sql
+SELECT id, host_and_port, last_contact FROM harmony_machines;
+```
+
+If this returns **zero rows** on a running daemon, you have this bug.
+
+**Fix:** Upgrade to a build that includes the engine keepalive (curio-core #77).
+A `systemctl restart curio-core` restores service immediately on a fixed binary;
+on an unfixed binary it only buys another ~10 minutes.
 
 ## settleRail always reverts with `CannotSettleFutureEpochs`
 
