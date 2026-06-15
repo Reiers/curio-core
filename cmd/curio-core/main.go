@@ -364,6 +364,14 @@ Flags:
 			EmbeddedMode:  true,
 			VMBridgeRPC:   bridgeURL,
 			VMBridgeToken: *vmBridgeToken,
+
+			// lantern#44: warm the embedded blockstore on every head
+			// advance for the contracts curio-core reads. This is what
+			// lets local eth_call serve PDPVerifier / FWSS / SP-registry
+			// / USDFC reads from the cache instead of falling back to
+			// the VMBridge. Unknown networks (devnet) get nil and the
+			// prefetcher is a no-op.
+			FEVMPrefetchAddrs: fevmPrefetchAddrsForNetwork(*network),
 		})
 		if err != nil {
 			_ = eng.Stop()
