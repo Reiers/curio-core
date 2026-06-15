@@ -54,6 +54,7 @@ import (
 	"github.com/Reiers/curio-core/internal/setupweb"
 
 	"github.com/filecoin-project/curio/harmony/harmonytask"
+	"github.com/filecoin-project/curio/lib/chainsched"
 	"github.com/filecoin-project/curio/tasks/message"
 )
 
@@ -522,6 +523,26 @@ Flags:
 	// shutdown cancellation.
 	if chainDeps != nil && chainDeps.ChainSched != nil {
 		eng.SetChainSched(chainDeps.ChainSched)
+
+		// Wire MessageWatcherEth in the before-chainSched window. It polls
+		// message_waits_eth 'pending' rows, fetches receipts via the
+		// embedded Lantern VMBridge, and marks tx confirmed so the pdpv0
+		// dataset_watch / terminate / delete handlers can advance past
+		// `ok IS NULL` rows. It needs the live TaskEngine ref AND must
+		// register its chainSched watcher BEFORE chainSched.Run() starts
+		// (AddWatcher rejects registration after start). Constructing it
+		// after eng.Start() — as before — raced the scheduler and failed
+		// with "cannot add watcher handler after start", silently dropping
+		// eth tx confirmation (curio-core#81).
+		if chainDeps.EthClient != nil {
+			ethClient := chainDeps.EthClient
+			eng.OnBeforeChainSched(func(te *harmonytask.TaskEngine, sched *chainsched.CurioChainSched) error {
+				if _, err := message.NewMessageWatcherEth(eng.DB(), te, sched, ethClient); err != nil {
+					return fmt.Errorf("NewMessageWatcherEth: %w", err)
+				}
+				return nil
+			})
+		}
 	}
 	if err := eng.Start(rootCtx, extraTasks...); err != nil {
 		_ = eng.Stop()
@@ -542,20 +563,8 @@ Flags:
 	}
 	fmt.Printf("  parkcomplete: streaming-upload -> parked_pieces.complete bridge active (stash=%s)\n", stashDir)
 
-	// Wire MessageWatcherEth: polls message_waits_eth rows in 'pending'
-	// state, fetches their receipt via eth_getTransactionReceipt through
-	// the embedded Lantern VMBridge, and UPDATEs tx_status='confirmed' +
-	// tx_success + tx_receipt. Required for the pdpv0 dataset_watch /
-	// terminate / delete handlers to advance past `ok IS NULL` rows.
-	//
-	// Constructed AFTER engine.Start because NewMessageWatcherEth takes
-	// a *harmonytask.TaskEngine reference to assign work to itself, and
-	// the engine must be running to accept assignments.
 	if chainDeps != nil && chainDeps.ChainSched != nil && chainDeps.EthClient != nil {
-		if _, err := message.NewMessageWatcherEth(eng.DB(), eng.TaskEngine(), chainDeps.ChainSched, chainDeps.EthClient); err != nil {
-			_ = eng.Stop()
-			return fmt.Errorf("NewMessageWatcherEth: %w", err)
-		}
+		// Wired pre-Start via OnBeforeChainSched above; just report it.
 		fmt.Printf("  msg-watch: message_waits_eth pending-tx poller active\n")
 	}
 

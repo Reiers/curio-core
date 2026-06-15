@@ -102,6 +102,15 @@ type Engine struct {
 	chainSchedCancel context.CancelFunc
 	chainSchedDone   chan struct{}
 
+	// beforeChainSched holds callbacks that must register chainSched
+	// handlers/watchers AFTER the TaskEngine exists but BEFORE
+	// chainSched.Run() flips started=true (after which AddWatcher/
+	// AddHandler error with "cannot add ... after start"). The eth
+	// message watcher needs exactly this window: it takes a live
+	// *harmonytask.TaskEngine ref and calls chainSched.AddWatcher.
+	// See OnBeforeChainSched + the call site in Start.
+	beforeChainSched []func(*harmonytask.TaskEngine, *chainsched.CurioChainSched) error
+
 	// machineKeepaliveStop signals the harmony_machines heartbeat
 	// goroutine to exit. Closed in Stop. See startMachineKeepalive.
 	machineKeepaliveStop chan struct{}
@@ -193,6 +202,18 @@ func (e *Engine) NotifyKick() {
 // runtime watchers (e.g. message.MessageWatcherEth) that need to assign
 // work to the running engine.
 func (e *Engine) TaskEngine() *harmonytask.TaskEngine { return e.te }
+
+// OnBeforeChainSched registers a callback fired during Start, after the
+// TaskEngine is constructed but before chainSched.Run() starts. This is
+// the only valid window to call chainSched.AddWatcher/AddHandler, which
+// reject registration once the scheduler is running. Must be called
+// BEFORE Start. No-op chainSched (nil) skips the callbacks.
+func (e *Engine) OnBeforeChainSched(fn func(*harmonytask.TaskEngine, *chainsched.CurioChainSched) error) {
+	if e.running.Load() {
+		panic("engine: OnBeforeChainSched after Start")
+	}
+	e.beforeChainSched = append(e.beforeChainSched, fn)
+}
 
 // Registry returns the immutable task registry built at New() time.
 func (e *Engine) Registry() *TaskRegistry { return e.registry }
@@ -296,6 +317,17 @@ func (e *Engine) Start(ctx context.Context, extraTasks ...harmonytask.TaskInterf
 	// so we own it in a goroutine. Stop cancels its context and waits
 	// on chainSchedDone.
 	if e.chainSched != nil {
+		// Register chainSched watchers/handlers in the narrow window
+		// between TaskEngine construction and chainSched.Run(): once
+		// Run flips started=true, AddWatcher/AddHandler error out.
+		// This is where the eth message watcher must be wired (it needs
+		// the live TaskEngine ref AND a not-yet-started scheduler).
+		for _, fn := range e.beforeChainSched {
+			if err := fn(te, e.chainSched); err != nil {
+				e.running.Store(false)
+				return fmt.Errorf("engine: before-chainSched hook: %w", err)
+			}
+		}
 		schedCtx, cancel := context.WithCancel(context.Background())
 		e.chainSchedCancel = cancel
 		e.chainSchedDone = make(chan struct{})
