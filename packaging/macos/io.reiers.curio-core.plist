@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.reiers.curio-core</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/curio-core</string>
+    <string>run</string>
+    <string>--data-dir</string>
+    <string>/usr/local/var/curio-core</string>
+  </array>
+
+  <!-- Do NOT auto-start at load: first-run setup (wallet bootstrap +
+       funding) must happen before the SP is useful. Operator runs:
+         sudo launchctl kickstart -k system/io.reiers.curio-core
+       once configured, or enables RunAtLoad via a launchctl override. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/usr/local/var/log/curio-core/curio-core.log</string>
+  <key>StandardErrorPath</key>
+  <string>/usr/local/var/log/curio-core/curio-core.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Standard</string>
+</dict>
+</plist>

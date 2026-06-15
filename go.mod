@@ -305,3 +305,5 @@ replace github.com/filecoin-project/curio => github.com/Reiers/curio v1.27.3-0.2
 replace github.com/curiostorage/harmonyquery => github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13
 
 replace github.com/filecoin-project/lotus => github.com/Reiers/lotus v0.2.11-0.20260523143243-6f450583a634
+
+replace github.com/elastic/gosigar => ./third_party/gosigar

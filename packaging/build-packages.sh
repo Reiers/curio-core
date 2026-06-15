@@ -10,9 +10,9 @@
 #           dist/curio-core_<ver>_<arch>.deb
 #           dist/curio-core-<ver>.<arch>.rpm
 #
-# macOS .pkg is NOT built here: curio-core has no macOS binary yet
-# (lotus/system -> gosigar needs CGO on darwin, filecoin-ffi pulls in under
-# CGO=1). Tracked as a darwin carve-out follow-up to #68.
+# macOS .pkg is built by packaging/build-pkg-macos.sh (runs on macOS only).
+# curio-core now builds CGO-free on darwin via the third_party/gosigar
+# replace (#80), so darwin is a first-class target.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."   # repo root

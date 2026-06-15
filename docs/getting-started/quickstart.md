@@ -39,11 +39,16 @@ sudo mv curio-core /usr/local/bin/
 With a standalone binary you can self-update later: `curio-core upgrade --apply`.
 Package installs upgrade via `apt`/`dnf` instead.
 
-::: info macOS
-Native macOS packages aren't published yet (curio-core's chain-resource detection
-still needs a darwin build carve-out). Run it on Linux for now — a small VM or box
-is enough for calibration.
-:::
+### macOS (.pkg)
+
+```bash
+curl -LO https://github.com/Reiers/curio-core/releases/latest/download/curio-core-arm64.pkg
+sudo installer -pkg curio-core-arm64.pkg -target /
+```
+
+Installs `/usr/local/bin/curio-core` + a launchd job (not started — run setup first).
+The `.pkg` is unsigned in pre-alpha; the installer's postinstall strips the
+quarantine attribute so Gatekeeper allows it. Apple-silicon only for now.
 
 Verify:
 
@@ -63,6 +68,13 @@ sudo journalctl -u curio-core -f   # watch it boot; copy the PDP wallet address
 
 The unit runs `curio-core run --data-dir /var/lib/curio-core` as the `curio-core`
 user. Edit network/flags with a drop-in: `sudo systemctl edit curio-core`.
+
+**macOS (launchd):**
+
+```bash
+sudo launchctl kickstart -k system/io.reiers.curio-core
+log stream --predicate 'process == "curio-core"'   # watch it boot
+```
 
 **Standalone binary:**
 

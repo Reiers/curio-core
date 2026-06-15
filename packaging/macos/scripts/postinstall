@@ -1,0 +1,32 @@
+#!/bin/bash
+# macOS .pkg postinstall: create data + log dirs, load the launchd job.
+# Runs as root during installation.
+set -e
+
+DATA_DIR=/usr/local/var/curio-core
+LOG_DIR=/usr/local/var/log/curio-core
+PLIST=/Library/LaunchDaemons/io.reiers.curio-core.plist
+
+mkdir -p "$DATA_DIR" "$LOG_DIR"
+chmod 0750 "$DATA_DIR"
+
+# Strip quarantine from the binary so Gatekeeper doesn't block the
+# unsigned pre-alpha build. (Signed/notarized builds are a later cost
+# decision; until then this keeps the install usable.)
+if [ -x /usr/local/bin/curio-core ]; then
+    /usr/bin/xattr -dr com.apple.quarantine /usr/local/bin/curio-core 2>/dev/null || true
+fi
+
+# Load the launchd job (bootstrap into the system domain). It is NOT set
+# to RunAtLoad, so this registers it without starting the SP.
+if [ -f "$PLIST" ]; then
+    /bin/launchctl bootout system "$PLIST" 2>/dev/null || true
+    /bin/launchctl bootstrap system "$PLIST" 2>/dev/null || true
+fi
+
+echo "curio-core installed."
+echo "  1) configure + start:  sudo launchctl kickstart -k system/io.reiers.curio-core"
+echo "  2) setup:              open http://127.0.0.1:14994/setup"
+echo "  3) docs:               https://curio-core-docs.pages.dev/"
+
+exit 0
