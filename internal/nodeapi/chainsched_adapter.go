@@ -30,8 +30,8 @@ import (
 	lotusapi "github.com/filecoin-project/lotus/api"
 	lotustypes "github.com/filecoin-project/lotus/chain/types"
 
-	lanterndaemon "github.com/Reiers/lantern/pkg/daemon"
 	lanterntypes "github.com/Reiers/lantern/chain/types"
+	lanterndaemon "github.com/Reiers/lantern/pkg/daemon"
 )
 
 // EmbeddedChainSchedNodeAPI satisfies the chainsched.NodeAPI interface
@@ -91,6 +91,31 @@ func (e *EmbeddedChainSchedNodeAPI) ChainNotify(ctx context.Context) (<-chan []*
 	out := make(chan []*lotusapi.HeadChange, 16)
 	go func() {
 		defer close(out)
+		// pendingReverts holds a revert-only batch until the next batch
+		// arrives, then prepends it (curio-core#78). On a 1-epoch
+		// calibration micro-reorg the header store fires OnHeadChange
+		// twice: a revert-only batch (head regressed to the divergence
+		// tipset) immediately followed by the re-apply batch. Upstream
+		// chainsched's update(lowest,highest) logs ERROR "no new tipset"
+		// for the revert-only batch because its apply side is nil.
+		//
+		// We merge the two: hold a revert-only batch and emit it joined
+		// to the front of the next batch's events. This is a pure
+		// SEQUENCING merge, not a timed hold — the distributor delivers
+		// batches in order on a single channel, and a revert-only batch is
+		// always immediately succeeded by its re-apply batch. No timer, no
+		// race. If the source closes with a revert still pending (shutdown
+		// mid-reorg), we flush it so no revert is ever dropped — chainsched
+		// then logs one benign "no new tipset" at teardown, which is fine.
+		var coalescer revertCoalescer
+		emit := func(events []*lotusapi.HeadChange) bool {
+			select {
+			case out <- events:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
 		for batch := range src {
 			converted := make([]*lotusapi.HeadChange, 0, len(batch))
 			for _, hc := range batch {
@@ -126,14 +151,68 @@ func (e *EmbeddedChainSchedNodeAPI) ChainNotify(ctx context.Context) (<-chan []*
 			if len(converted) == 0 {
 				continue
 			}
-			select {
-			case out <- converted:
-			case <-ctx.Done():
-				return
+			if merged := coalescer.push(converted); merged != nil {
+				if !emit(merged) {
+					return
+				}
 			}
+		}
+		// Source closed. Flush any still-pending reverts so none are lost.
+		if flush := coalescer.flush(); flush != nil {
+			_ = emit(flush)
 		}
 	}()
 	return out, nil
+}
+
+// revertCoalescer merges a revert-only HeadChange batch into the next
+// batch so downstream chainsched never sees a revert with no apply
+// (curio-core#78). It is a pure sequencing merge over the ordered
+// distributor stream: push returns nil to hold a revert-only batch, or
+// the batch (with any held reverts prepended) when an apply-bearing batch
+// arrives. flush drains a trailing held revert at stream close.
+type revertCoalescer struct {
+	pending []*lotusapi.HeadChange
+}
+
+func batchIsRevertOnly(batch []*lotusapi.HeadChange) bool {
+	if len(batch) == 0 {
+		return false
+	}
+	for _, hc := range batch {
+		if hc.Type != "revert" {
+			return false
+		}
+	}
+	return true
+}
+
+// push consumes one converted batch. Returns the batch to emit (possibly
+// with held reverts prepended), or nil if the batch was a revert-only
+// batch held for merging.
+func (c *revertCoalescer) push(batch []*lotusapi.HeadChange) []*lotusapi.HeadChange {
+	if batchIsRevertOnly(batch) {
+		// Accumulate in case multiple revert-only batches arrive
+		// back-to-back (a deeper reorg).
+		c.pending = append(c.pending, batch...)
+		return nil
+	}
+	if len(c.pending) > 0 {
+		merged := append(c.pending, batch...)
+		c.pending = nil
+		return merged
+	}
+	return batch
+}
+
+// flush returns any held reverts at stream close so none are dropped.
+func (c *revertCoalescer) flush() []*lotusapi.HeadChange {
+	if len(c.pending) == 0 {
+		return nil
+	}
+	out := c.pending
+	c.pending = nil
+	return out
 }
 
 // convertLanternTipSet re-encodes a Lantern TipSet through its block
