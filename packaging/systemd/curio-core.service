@@ -1,0 +1,30 @@
+[Unit]
+Description=Curio Core - single-binary Filecoin hot-storage provider
+Documentation=https://curio-core-docs.pages.dev/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=curio-core
+Group=curio-core
+# Data dir is created + chowned by the package postinstall script.
+Environment=CURIO_CORE_DATA_DIR=/var/lib/curio-core
+ExecStart=/usr/bin/curio-core run --data-dir ${CURIO_CORE_DATA_DIR}
+Restart=always
+RestartSec=5
+# ProveTask peaks ~3 GiB during fr32.Pad memtree build; give headroom.
+# Operators on small boxes can lower this via a drop-in.
+MemoryHigh=6G
+LimitNOFILE=65536
+
+# Hardening (read-only system, writable data dir only).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/curio-core
+StateDirectory=curio-core
+
+[Install]
+WantedBy=multi-user.target

@@ -57,6 +57,10 @@ import (
 	"github.com/filecoin-project/curio/tasks/message"
 )
 
+// versionTag is set at build time via -ldflags "-X main.versionTag=<tag>".
+// Falls back to the baked-in pre-alpha string for `go build`/`go run`.
+var versionTag = "0.0.1-prealpha"
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -101,7 +105,12 @@ func main() {
 			os.Exit(1)
 		}
 	case "version":
-		fmt.Println("curio-core 0.0.1-prealpha")
+		fmt.Printf("curio-core %s\n", versionTag)
+	case "upgrade":
+		if err := cmdUpgrade(args); err != nil {
+			fmt.Fprintf(os.Stderr, "curio-core upgrade: %v\n", err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -124,6 +133,7 @@ Subcommands:
   sp             SP registry operations (register, info)
   config         headless config inspection + mutation
   demo           synapse-sdk-shaped end-to-end demo flows (create-dataset)
+  upgrade        check GitHub releases for a newer version (opt-in self-update)
   version        print version
   help           this message
 
@@ -600,7 +610,7 @@ Flags:
 		}
 		dashCfg := dashboard.Config{
 			Network:      *network,
-			Version:      "0.0.1-prealpha",
+			Version:      versionTag,
 			PayeeAddress: payeeForDash,
 			StashDir:     stashDir,
 			DataDir:      *dataDir,

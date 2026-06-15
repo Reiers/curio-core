@@ -1,0 +1,48 @@
+# nfpm config for curio-core .deb / .rpm packages.
+# Driven by the build script (packaging/build-packages.sh), which sets
+# the env vars below per target arch and version.
+#
+#   nfpm pkg --packager deb --config packaging/nfpm.yaml --target dist/
+#   nfpm pkg --packager rpm --config packaging/nfpm.yaml --target dist/
+#
+# Required env: CC_VERSION, CC_ARCH (amd64|arm64), CC_BINARY (built binary path).
+name: curio-core
+arch: ${CC_ARCH}
+platform: linux
+version: ${CC_VERSION}
+section: net
+priority: optional
+maintainer: TSE Reiersen <hello@reiers.io>
+description: |
+  Curio Core - single-binary Filecoin hot-storage provider.
+  A complete PDPv0 storage provider (embedded Lantern light client,
+  SQLite-backed harmonytask engine, PDP proof loop, USDFC payment
+  settlement, HTTP piece upload/download, branded WebUI) in one
+  pure-Go static binary. No external full node, no Postgres, no Rust.
+vendor: TSE Reiersen
+homepage: https://curio-core-docs.pages.dev/
+license: Apache-2.0
+
+contents:
+  - src: ${CC_BINARY}
+    dst: /usr/bin/curio-core
+    file_info:
+      mode: 0755
+  - src: packaging/systemd/curio-core.service
+    dst: /lib/systemd/system/curio-core.service
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: packaging/scripts/postinstall.sh
+  preremove: packaging/scripts/preremove.sh
+
+overrides:
+  rpm:
+    scripts:
+      postinstall: packaging/scripts/postinstall.sh
+      preremove: packaging/scripts/preremove.sh
+  deb:
+    scripts:
+      postinstall: packaging/scripts/postinstall.sh
+      preremove: packaging/scripts/preremove.sh
