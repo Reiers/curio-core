@@ -102,6 +102,22 @@ func (e *EmbeddedChainSchedNodeAPI) ChainNotify(ctx context.Context) (<-chan []*
 					// the whole subscription on one bad re-encode.
 					continue
 				}
+				// Startup transient: the distributor emits the first
+				// {Type:"current"} event before the embedded header
+				// store has seeded a head, so Val is nil. Upstream
+				// chainsched takes its first-notification path and
+				// calls update(nil, nil) -> logs ERROR "no new tipset".
+				// Substitute the real head from ChainHead so the first
+				// "current" carries a valid tipset. If ChainHead also
+				// can't produce one yet, drop the event; chainsched
+				// resubscribes and gets a seeded "current" next round.
+				if lotusTS == nil && hc.Type == "current" {
+					head, herr := e.full.ChainHead(ctx)
+					if herr != nil || head == nil {
+						continue
+					}
+					lotusTS = head
+				}
 				converted = append(converted, &lotusapi.HeadChange{
 					Type: hc.Type,
 					Val:  lotusTS,
