@@ -37,10 +37,10 @@ func fevmPrefetchAddrsForNetwork(network string) []string {
 	}
 	addrs := make([]string, 0, 4)
 	cs := contract.ContractAddressesFor(n)
-	if (cs.PDPVerifier != [20]byte{}) {
+	if cs.PDPVerifier != [20]byte{} {
 		addrs = append(addrs, cs.PDPVerifier.Hex())
 	}
-	if (cs.AllowedPublicRecordKeepers.FWSService != [20]byte{}) {
+	if cs.AllowedPublicRecordKeepers.FWSService != [20]byte{} {
 		addrs = append(addrs, cs.AllowedPublicRecordKeepers.FWSService.Hex())
 	}
 	if reg, err := contract.ServiceRegistryAddressFor(n); err == nil {
@@ -51,4 +51,3 @@ func fevmPrefetchAddrsForNetwork(network string) []string {
 	}
 	return addrs
 }
-

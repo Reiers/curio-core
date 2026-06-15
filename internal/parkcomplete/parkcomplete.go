@@ -213,8 +213,8 @@ var _ = harmonytask.Reg(&Task{})
 // with the scheme rewritten to custore by pdp/handlers_upload.go's
 // handleStreamingUpload:
 //
-//   diskstash:  file:///var/lib/curio-core-demo/stash/<uuid>.tmp
-//   custored:   custore:///var/lib/curio-core-demo/stash/<uuid>.tmp
+//	diskstash:  file:///var/lib/curio-core-demo/stash/<uuid>.tmp
+//	custored:   custore:///var/lib/curio-core-demo/stash/<uuid>.tmp
 //
 // The URL Path component IS the full absolute filesystem path; no
 // joining with stashDir is needed. stashDir is kept as a parameter

@@ -69,6 +69,16 @@ func Open(cfg Config) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
+	// A bare ":memory:" DSN gives each pooled connection its OWN private
+	// in-memory database. Migrations then land on one connection while a
+	// concurrent query (e.g. the engine's harmony_machines keepalive,
+	// curio-core#76) can grab a different, empty connection and fail with
+	// "no such table". Pin the pool to a single connection so the whole
+	// engine shares one in-memory DB. File-backed DBs keep the default
+	// pool (multiple readers + WAL writer).
+	if cfg.Path == ":memory:" {
+		s.SetMaxOpenConns(1)
+	}
 	if err := s.PingContext(context.Background()); err != nil {
 		_ = s.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)

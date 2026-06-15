@@ -60,12 +60,12 @@ type runRequest struct {
 
 // runResponse is the body shape for POST /api/run.
 type runResponse struct {
-	OK       bool   `json:"ok"`
-	ExitCode int    `json:"exit_code"`
-	Stdout   string `json:"stdout"`
-	Stderr   string `json:"stderr"`
-	Error    string `json:"error,omitempty"`
-	Truncated bool  `json:"truncated,omitempty"`
+	OK        bool   `json:"ok"`
+	ExitCode  int    `json:"exit_code"`
+	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
+	Error     string `json:"error,omitempty"`
+	Truncated bool   `json:"truncated,omitempty"`
 	Duration  string `json:"duration"`
 }
 

@@ -154,13 +154,13 @@ func (p *Poller) tick(ctx context.Context) error {
 			Fingerprint: fp,
 			Message:     row.Name + " failed (task_id=" + strconv.FormatInt(row.TaskID, 10) + ")",
 			Context: map[string]any{
-				"task_id":         row.TaskID,
-				"name":            row.Name,
-				"history_id":      row.ID,
-				"work_start":      row.WorkStart,
-				"err":             errMsg,
-				"prior_failures":  priorFailures,
-				"history_result":  row.Result,
+				"task_id":        row.TaskID,
+				"name":           row.Name,
+				"history_id":     row.ID,
+				"work_start":     row.WorkStart,
+				"err":            errMsg,
+				"prior_failures": priorFailures,
+				"history_result": row.Result,
 			},
 		})
 		if emitErr != nil {
@@ -175,5 +175,3 @@ func (p *Poller) tick(ctx context.Context) error {
 	}
 	return nil
 }
-
-

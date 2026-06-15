@@ -482,8 +482,6 @@ func (s *Server) handleRails(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "rails", "Payment Rails", "rails", d)
 }
 
-
-
 type tasksData struct {
 	Active []taskRow
 	Recent []taskHistRow
@@ -745,5 +743,3 @@ func funcMap() template.FuncMap {
 		"add": func(a, b int) int { return a + b },
 	}
 }
-
-

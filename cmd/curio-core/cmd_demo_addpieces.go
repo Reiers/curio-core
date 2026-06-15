@@ -419,15 +419,15 @@ func buildAddPiecesTypedData(
 // FilecoinWarmStorageServiceStateView.getDataSet(dataSetId).clientDataSetId.
 // The struct return shape (from the StateView ABI) is:
 //
-//   pdpRailId uint256        (offset 0)
-//   cacheMissRailId uint256  (offset 32)
-//   cdnRailId uint256        (offset 64)
-//   payer address            (offset 96)
-//   payee address            (offset 128)
-//   serviceProvider address  (offset 160)
-//   commissionBps uint256    (offset 192)
-//   clientDataSetId uint256  (offset 224)
-//   ...
+//	pdpRailId uint256        (offset 0)
+//	cacheMissRailId uint256  (offset 32)
+//	cdnRailId uint256        (offset 64)
+//	payer address            (offset 96)
+//	payee address            (offset 128)
+//	serviceProvider address  (offset 160)
+//	commissionBps uint256    (offset 192)
+//	clientDataSetId uint256  (offset 224)
+//	...
 //
 // We hit upstream glif directly for this read-only call; daemon
 // proxying not needed.

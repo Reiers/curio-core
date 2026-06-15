@@ -140,10 +140,10 @@ type sqliteQry struct {
 	rows *sql.Rows
 }
 
-func (q *sqliteQry) Next() bool             { return q.rows.Next() }
-func (q *sqliteQry) Err() error             { return q.rows.Err() }
-func (q *sqliteQry) Close()                 { _ = q.rows.Close() }
-func (q *sqliteQry) Scan(dst ...any) error  { return scanWithTimeFix(q.rows.Scan, dst...) }
+func (q *sqliteQry) Next() bool            { return q.rows.Next() }
+func (q *sqliteQry) Err() error            { return q.rows.Err() }
+func (q *sqliteQry) Close()                { _ = q.rows.Close() }
+func (q *sqliteQry) Scan(dst ...any) error { return scanWithTimeFix(q.rows.Scan, dst...) }
 func (q *sqliteQry) Values() ([]any, error) {
 	cols, err := q.rows.Columns()
 	if err != nil {
@@ -237,11 +237,11 @@ func scanWithTimeFix(scan func(...any) error, dst ...any) error {
 //
 // Provenance of each format:
 //
-//	- "2006-01-02 15:04:05.999999999 -0700 MST"  Go time.Time.String()
-//	                                              (modernc default Value())
-//	- "2006-01-02 15:04:05.999999999"             modernc explicit fmt
-//	- "2006-01-02 15:04:05"                       SQLite CURRENT_TIMESTAMP
-//	- time.RFC3339Nano / time.RFC3339             Go MarshalJSON / -Text shape
+//   - "2006-01-02 15:04:05.999999999 -0700 MST"  Go time.Time.String()
+//     (modernc default Value())
+//   - "2006-01-02 15:04:05.999999999"             modernc explicit fmt
+//   - "2006-01-02 15:04:05"                       SQLite CURRENT_TIMESTAMP
+//   - time.RFC3339Nano / time.RFC3339             Go MarshalJSON / -Text shape
 func parseSQLiteTime(s string) (time.Time, error) {
 	// Strip Go's monotonic-clock suffix when present. time.Time.String()
 	// appends ` m=±<seconds>` whenever the value carries a monotonic

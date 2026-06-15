@@ -55,8 +55,9 @@ var ethCryptoKeccak256 = ethCrypto.Keccak256
 
 // Default operator-approval parameters mirror synapse-sdk defaults
 // (packages/synapse-core/src/pay/set-operator-approval.ts +
-//  packages/synapse-core/src/utils/constants.ts: LOCKUP_PERIOD =
-//  DEFAULT_LOCKUP_DAYS(30) * EPOCHS_PER_DAY(2880) = 86400).
+//
+//	packages/synapse-core/src/utils/constants.ts: LOCKUP_PERIOD =
+//	DEFAULT_LOCKUP_DAYS(30) * EPOCHS_PER_DAY(2880) = 86400).
 const (
 	defaultMaxLockupPeriodEpochs = 86400 // 30 days * 2880 epochs/day
 )

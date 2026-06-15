@@ -51,8 +51,8 @@ import (
 	"github.com/filecoin-project/curio/harmony/taskhelp"
 	"github.com/filecoin-project/curio/lib/ethchain"
 	"github.com/filecoin-project/curio/lib/filecoinpayment"
-	"github.com/filecoin-project/curio/tasks/message"
 	"github.com/filecoin-project/curio/pdp/contract"
+	"github.com/filecoin-project/curio/tasks/message"
 
 	logging "github.com/ipfs/go-log/v2"
 )

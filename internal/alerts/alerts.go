@@ -247,8 +247,8 @@ func Ack(ctx context.Context, db harmonyquery.DBInterface, id int64) (int, error
 
 // Counts returns total / unacked / by-severity counts for dashboard use.
 type Counts struct {
-	Total    int64            `json:"total"`
-	Unacked  int64            `json:"unacked"`
+	Total      int64            `json:"total"`
+	Unacked    int64            `json:"unacked"`
 	BySeverity map[string]int64 `json:"by_severity"`
 }
 

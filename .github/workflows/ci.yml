@@ -20,7 +20,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          # Match go.mod's `go 1.26` directive. CI on 1.25.x was both a
+          # toolchain-older-than-module mismatch and a gofmt-rule skew
+          # (1.26 gofmt drops redundant parens around != comparisons),
+          # which produced spurious gofmt-drift failures.
+          go-version: '1.26.x'
           cache: true
 
       - name: Configure git for private Reiers deps

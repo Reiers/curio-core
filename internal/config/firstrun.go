@@ -1,7 +1,7 @@
 // Package config holds the curio-core first-run detection + the
 // minimal config bundle the daemon needs before it can do useful work.
 //
-// Storage shape
+// # Storage shape
 //
 // Config lives in the SQLite `harmony_config` table (one row per
 // "layer"; we use the "default" layer for the single curio-core

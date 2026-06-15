@@ -25,9 +25,9 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/filecoin-project/go-jsonrpc"
 	lotusapi "github.com/filecoin-project/lotus/api"
 	lotusclient "github.com/filecoin-project/lotus/api/client"
-	"github.com/filecoin-project/go-jsonrpc"
 
 	lanterndaemon "github.com/Reiers/lantern/pkg/daemon"
 )

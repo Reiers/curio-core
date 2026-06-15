@@ -26,12 +26,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	upstreampdp "github.com/filecoin-project/curio/pdp"
-	pdpcontract "github.com/filecoin-project/curio/pdp/contract"
 	"github.com/filecoin-project/curio/lib/cachedreader"
 	"github.com/filecoin-project/curio/lib/chainsched"
 	"github.com/filecoin-project/curio/lib/ethchain"
 	curiopaths "github.com/filecoin-project/curio/lib/paths"
+	upstreampdp "github.com/filecoin-project/curio/pdp"
+	pdpcontract "github.com/filecoin-project/curio/pdp/contract"
 	"github.com/filecoin-project/curio/tasks/message"
 	"github.com/filecoin-project/curio/tasks/pdpv0"
 
