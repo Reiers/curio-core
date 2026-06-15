@@ -74,14 +74,42 @@ You should see:
 
 ## 5. (Optional) Wire to a public hostname
 
-If you want this SP to receive client traffic, you need:
+curio-core terminates TLS itself — **no nginx required**. It runs a two-port model:
 
-1. A public DNS name (`sp.example.com`) pointing at the box.
-2. nginx in front terminating TLS, proxying to `127.0.0.1:14994`. Important: forward
-   only `/pdp/*`, `/piece/*`, and `/.well-known/*` to the public side. **Never** expose
-   `/admin/*` or `/`/dashboard paths.
-3. The service registered on the Filecoin **Service Registry** so clients can discover
-   you (see [Operate → Registration](/operating/dashboard)).
+- **Admin port** (`--admin-listen`, default `127.0.0.1:14994`): dashboard, `/setup`,
+  `/admin/*`. Loopback-only; never exposed publicly.
+- **Public port** (`--public-listen`): `/pdp/*` + `/piece/*`. Gets a LetsEncrypt cert
+  automatically via baked-in [`autocert`](https://pkg.go.dev/golang.org/x/crypto/acme/autocert).
+
+To receive client traffic:
+
+1. Point a public DNS name (`sp.example.com`) at the box.
+2. Open ports **80** (ACME HTTP-01 challenge) and **443** (HTTPS).
+3. Start with the public surface enabled:
+
+```bash
+curio-core run \
+  --data-dir /var/lib/curio-core \
+  --network calibration \
+  --admin-listen 127.0.0.1:14994 \
+  --public-listen 0.0.0.0:443 \
+  --public-tls-domain sp.example.com
+```
+
+On first boot curio-core provisions a cert from LetsEncrypt and serves valid TLS within
+~30s. The cert + ACME account state persist in the `autocert_cache` SQLite table, so
+restarts never trigger a fresh ACME round-trip. The `/admin/*` and dashboard surfaces
+stay on the loopback admin port and are never reachable from the public internet.
+
+4. Register the service on the Filecoin **Service Registry** so clients can discover you
+   (see [Operate → Registration](/operating/dashboard)).
+
+::: tip Already running nginx for other services?
+Point the public surface at a loopback port and proxy to it:
+`--public-listen 127.0.0.1:14995` (plaintext, no `--public-tls-domain`), then terminate
+TLS in your existing nginx and forward only `/pdp/*` + `/piece/*`. Never proxy `/admin/*`
+or `/`.
+:::
 
 ## What's next
 

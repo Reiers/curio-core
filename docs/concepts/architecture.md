@@ -57,7 +57,11 @@ Everything inside the box is in one process. The only external dependencies are:
 
 - the Filecoin chain itself (via Lantern's libp2p peers + the FEVM bridge upstream)
 - the local filesystem (state DB + piece bytes)
-- (optionally) an nginx reverse proxy in front for TLS + path filtering
+
+TLS is terminated in-process via baked-in `autocert` (the two-port model, see
+[Quickstart §5](/getting-started/quickstart)), so no nginx / reverse proxy is needed in
+the default deploy. Operators who already run nginx for other services can still front a
+plaintext `--public-listen` loopback port if they prefer.
 
 ## Key seams
 

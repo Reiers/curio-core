@@ -20,7 +20,12 @@ Flags:
 |---|---|---|
 | `--data-dir` | `~/.curio-core` | Persistent state directory (SQLite + Lantern + stash) |
 | `--network` | (from build) | `calibration` or `mainnet` |
-| `--listen` | `127.0.0.1:14994` | HTTP listen address |
+| `--listen` | `127.0.0.1:14994` | Deprecated alias for `--admin-listen` |
+| `--admin-listen` | (falls back to `--listen`) | Loopback admin/UI surface: dashboard, `/setup`, `/admin/*` |
+| `--public-listen` | (empty = single-port) | Public surface: `/pdp/*` + `/piece/*`. Empty keeps everything on the admin port |
+| `--public-tls-domain` | (empty) | Domain for baked-in `autocert` TLS on the public port. Empty serves plaintext (dev) and refuses `:443` |
+| `--acme-http-listen` | `:80` | ACME HTTP-01 challenge + HTTP→HTTPS redirect bind (only with `--public-tls-domain`) |
+| `--acme-directory-url` | (empty) | Override ACME directory (LetsEncrypt staging / tests) |
 | `--vm-bridge-rpc` | per-network default | Upstream Filecoin RPC for FEVM operations |
 | `--vm-bridge-rpc-disable` | false | Disable the FEVM bridge entirely (offline-only mode) |
 | `--engine-cpu` | 4 | harmonytask CPU budget |
