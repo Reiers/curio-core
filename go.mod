@@ -17,6 +17,7 @@ require (
 	github.com/ipfs/go-cid v0.6.1
 	github.com/ipfs/go-log/v2 v2.9.2
 	github.com/yugabyte/pgx/v5 v5.7.6-yb-1
+	golang.org/x/crypto v0.51.0
 	modernc.org/sqlite v1.50.1
 )
 
@@ -276,7 +277,6 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
-	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.53.0 // indirect

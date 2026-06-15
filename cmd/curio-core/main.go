@@ -24,8 +24,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/crypto/acme/autocert"
 
 	lanternbuild "github.com/Reiers/lantern/build"
 	lantern "github.com/Reiers/lantern/pkg/daemon"
@@ -36,13 +39,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Reiers/curio-core/internal/acmecache"
 	"github.com/Reiers/curio-core/internal/admin"
 	"github.com/Reiers/curio-core/internal/alerts"
 	"github.com/Reiers/curio-core/internal/config"
+	"github.com/Reiers/curio-core/internal/dashboard"
 	"github.com/Reiers/curio-core/internal/engine"
 	"github.com/Reiers/curio-core/internal/ethkeys"
+	"github.com/Reiers/curio-core/internal/httpserve"
 	"github.com/Reiers/curio-core/internal/parkcomplete"
-	"github.com/Reiers/curio-core/internal/dashboard"
 	"github.com/Reiers/curio-core/internal/payments"
 	"github.com/Reiers/curio-core/internal/pdpwire"
 	"github.com/Reiers/curio-core/internal/retrieval"
@@ -250,7 +255,12 @@ func cmdRun(args []string) error {
 	network := fs.String("network", string(lanternbuild.DefaultNetwork), "Filecoin network: mainnet | calibration")
 	gateway := fs.String("gateway", "", "Lantern gateway URL (default chosen per --network; see pkg/daemon.applyDefaults)")
 	dbPath := fs.String("db-path", "", "Path to the harmonysqlite state DB (default: <data-dir>/state.sqlite)")
-	listenAddr := fs.String("listen", "127.0.0.1:4711", "HTTP listen address for the WebUI / /setup flow")
+	listenAddr := fs.String("listen", "127.0.0.1:4711", "[deprecated alias for --admin-listen] HTTP listen for the admin WebUI / /setup flow")
+	adminListen := fs.String("admin-listen", "", "Admin/UI loopback listen (dashboard, /setup, /admin/*). Defaults to --listen. Keep this loopback-only.")
+	publicListen := fs.String("public-listen", "", "Public synapse-sdk surface listen (/pdp/*, /piece/*). Empty disables the public port (single-port admin-only mode). Use 0.0.0.0:443 with --public-tls-domain for prod, or 127.0.0.1:14995 behind an existing proxy.")
+	publicTLSDomain := fs.String("public-tls-domain", "", "Domain for autocert (LetsEncrypt) TLS on the public port. Empty serves plaintext (dev only) and refuses to bind :443.")
+	acmeHTTPAddr := fs.String("acme-http-listen", ":80", "Bind for the ACME HTTP-01 challenge + HTTP->HTTPS redirect (only used with --public-tls-domain). Empty disables the :80 listener.")
+	acmeDirectoryURL := fs.String("acme-directory-url", "", "Override the ACME directory URL (for LetsEncrypt staging / tests). Empty uses production.")
 	noLantern := fs.Bool("no-lantern", false, "Skip the embedded Lantern daemon (engine + WebUI only; useful for first-run setup on a host without gateway access yet)")
 	lanternTimeout := fs.Duration("lantern-anchor-timeout", 30*time.Second, "Time to wait for Lantern to reach Started state during boot")
 	vmBridgeRPC := fs.String("vm-bridge-rpc", "", "Upstream Forest/Lotus JSON-RPC URL for FEVM forwarding (eth_call/eth_estimateGas/sendRawTransaction). Defaults per --network: calibration -> https://api.calibration.node.glif.io/rpc/v1, mainnet -> https://api.node.glif.io/rpc/v1. Pass an empty string with --vm-bridge-rpc-disable to disable.")
@@ -551,32 +561,32 @@ Flags:
 	}()
 	fmt.Printf("  alerts:   /admin/alerts active (task-history poller, 30s interval)\n")
 
-	// --- HTTP server ---
-	// curio-core composes two route sets under one listener:
-	//   /pdp/*  — upstream curio/pdp HTTP API (synapse-sdk speaks this)
-	//   /, /setup, /api/setup — curio-core's first-run WebUI flow
-	pdpMux := chi.NewRouter()
-	if _, err := pdpwire.Mount(rootCtx, pdpMux, eng.DB(), stashDir, chainDeps); err != nil {
+	// --- HTTP server (two-port model, curio-core#69) ---
+	// Public surface (TLS-capable, internet-facing):
+	//   /pdp/*   — upstream curio/pdp HTTP API (synapse-sdk speaks this)
+	//   /piece/* — HTTP retrieval (PDP read path)
+	// Admin surface (loopback, no TLS):
+	//   /admin/* — test-tx, eth-key
+	//   /, /setup, /api/setup, dashboard — operator UI
+	publicMux := chi.NewRouter()
+	if _, err := pdpwire.Mount(rootCtx, publicMux, eng.DB(), stashDir, chainDeps); err != nil {
 		_ = eng.Stop()
 		return fmt.Errorf("pdpwire.Mount: %w", err)
 	}
 	fmt.Printf("  pdp:      /pdp/* routes mounted (stash %s)\n", stashDir)
 
-	// Mount /admin/* on the same chi router (test-tx, eth-key).
-	// Loopback-only by intent; nginx in front does not forward /admin/*
-	// to the public internet.
+	// /piece/{pieceCid} HTTP retrieval is part of the public surface.
+	retrieval.Routes(publicMux, eng.DB(), stashDir)
+	fmt.Printf("  retrieval:/piece/{pieceCid} mounted (HTTP Range, ETag, immutable cache)\n")
+
+	// Admin mux: /admin/* (test-tx, eth-key). Loopback-only by intent.
+	adminMux := chi.NewRouter()
 	var adminSender *message.SenderETH
 	if chainDeps != nil {
 		adminSender = chainDeps.SenderETH
 	}
-	admin.Routes(pdpMux, eng.DB(), adminSender)
+	admin.Routes(adminMux, eng.DB(), adminSender)
 	fmt.Printf("  admin:    /admin/test-tx, /admin/eth-key mounted (loopback)\n")
-
-	// Mount /piece/{pieceCid} for HTTP retrieval (PDP read path).
-	// Reads directly from parked_pieces + parked_piece_refs via
-	// localpiecepark, no shared-reader cache (single-node SP shape).
-	retrieval.Routes(pdpMux, eng.DB(), stashDir)
-	fmt.Printf("  retrieval:/piece/{pieceCid} mounted (HTTP Range, ETag, immutable cache)\n")
 
 	// Operator + client dashboard (Curio Core branded). Wired as the
 	// fallthrough behind setupweb's first-run guard: while first-run
@@ -609,16 +619,73 @@ Flags:
 	setupHandler := setupweb.New(eng.DB())
 	setupHandler.Inner = dashMux
 	setupHandler.DisableFirstRunRedirect = true
-	handler := pdpwire.FallbackHandler(pdpMux, setupHandler)
-	srv := &http.Server{
-		Addr:              *listenAddr,
-		Handler:           handler,
-		ReadTimeout:       30 * time.Second,
-		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      30 * time.Second,
+	// Admin handler: /admin/* on adminMux, everything else (dashboard +
+	// setup) on setupHandler. Reuse adminFallback so /admin/* doesn't
+	// fall into the dashboard.
+	adminHandler := adminFallback(adminMux, setupHandler)
+
+	// Resolve admin bind: --admin-listen wins, else legacy --listen.
+	adminBind := *adminListen
+	if adminBind == "" {
+		adminBind = *listenAddr
 	}
 
-	ln, err := net.Listen("tcp", *listenAddr)
+	// Single-port back-compat: when --public-listen is empty, serve the
+	// whole surface (public + admin) on the admin bind via the original
+	// FallbackHandler, exactly as before the two-port split. This keeps
+	// existing deploys (cc-smoke uses only --listen) working unchanged.
+	//
+	// publicMux + adminMux both register routes at their FULL paths
+	// (/pdp/..., /piece/..., /admin/...), so we dispatch by prefix
+	// rather than chi-Mount (which would double-prefix). combinedChi
+	// routes /pdp|/piece -> publicMux, /admin -> adminMux, everything
+	// else -> setupHandler.
+	var servers *httpserve.Servers
+	if *publicListen == "" {
+		combined := combinedRouter(publicMux, adminMux, setupHandler)
+		srv := &http.Server{
+			Handler:           combined,
+			ReadTimeout:       30 * time.Second,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		ln, lerr := net.Listen("tcp", adminBind)
+		if lerr != nil {
+			_ = eng.Stop()
+			if lanternDaemon != nil {
+				stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				_ = lanternDaemon.Stop(stopCtx)
+				stopCancel()
+			}
+			return fmt.Errorf("http listen: %w", lerr)
+		}
+		fmt.Printf("  webui:    http://%s/ (single-port mode; pass --public-listen to split)\n", ln.Addr())
+		serveErr := make(chan error, 1)
+		go func() {
+			e := srv.Serve(ln)
+			if !errors.Is(e, http.ErrServerClosed) {
+				serveErr <- e
+				return
+			}
+			serveErr <- nil
+		}()
+		return waitAndShutdownSingle(rootCtx, srv, serveErr, eng, lanternDaemon)
+	}
+
+	// Two-port mode.
+	var certCache autocert.Cache
+	if *publicTLSDomain != "" {
+		certCache = acmecache.New(eng.DB())
+	}
+	servers, err = httpserve.Build(httpserve.Config{
+		AdminListen:           adminBind,
+		PublicListen:          *publicListen,
+		PublicTLSDomain:       *publicTLSDomain,
+		ACMEHTTPChallengeAddr: *acmeHTTPAddr,
+		ACMEDirectoryURL:      *acmeDirectoryURL,
+		AdminHandler:          adminHandler,
+		PublicHandler:         publicMux,
+		Cache:                 certCache,
+	})
 	if err != nil {
 		_ = eng.Stop()
 		if lanternDaemon != nil {
@@ -626,18 +693,18 @@ Flags:
 			_ = lanternDaemon.Stop(stopCtx)
 			stopCancel()
 		}
-		return fmt.Errorf("http listen: %w", err)
+		return fmt.Errorf("httpserve.Build: %w", err)
 	}
-	fmt.Printf("  webui:    http://%s/\n", ln.Addr())
+	fmt.Printf("  admin-ui: http://%s/ (loopback)\n", servers.AdminLn.Addr())
+	if servers.TLSActive() {
+		fmt.Printf("  public:   %s (autocert TLS for %s, ACME HTTP-01 on %s)\n", servers.PublicURL(), *publicTLSDomain, *acmeHTTPAddr)
+	} else {
+		fmt.Printf("  public:   %s (PLAINTEXT \u2014 dev mode, no --public-tls-domain)\n", servers.PublicURL())
+	}
 
 	serveErr := make(chan error, 1)
 	go func() {
-		err := srv.Serve(ln)
-		if !errors.Is(err, http.ErrServerClosed) {
-			serveErr <- err
-			return
-		}
-		serveErr <- nil
+		serveErr <- servers.Run(rootCtx)
 	}()
 
 	fmt.Printf("\ncurio-core is running. Ctrl-C to stop.\n")
@@ -655,10 +722,13 @@ Flags:
 	}
 
 	// --- Shutdown, in reverse order ---
+	// Cancel rootCtx so servers.Run() unwinds its listeners gracefully
+	// (it owns Admin/Public/ACME Shutdown internally), then wait for it.
+	cancelRoot()
+	<-serveErr
+
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
-
-	_ = srv.Shutdown(shutdownCtx)
 
 	if lanternDaemon != nil {
 		if err := lanternDaemon.Stop(shutdownCtx); err != nil {
@@ -670,6 +740,69 @@ Flags:
 		return fmt.Errorf("engine.Stop: %w", err)
 	}
 
+	fmt.Printf("Stopped cleanly.\n")
+	return nil
+}
+
+// adminFallback routes /admin/* to adminMux and everything else to inner
+// (the dashboard/setup handler). Mirrors pdpwire.FallbackHandler but for
+// the admin port's narrower /admin/* prefix.
+func adminFallback(adminMux http.Handler, inner http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		if p == "/admin" || strings.HasPrefix(p, "/admin/") {
+			adminMux.ServeHTTP(w, r)
+			return
+		}
+		inner.ServeHTTP(w, r)
+	})
+}
+
+// combinedRouter dispatches by path prefix for single-port back-compat:
+// /pdp + /piece -> publicMux, /admin -> adminMux, else -> inner. The
+// muxes already hold full-path routes, so we must NOT chi-Mount them
+// under a prefix (that would double-prefix to /pdp/pdp/...). Plain
+// prefix dispatch preserves the pre-split routing exactly.
+func combinedRouter(publicMux, adminMux, inner http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		switch {
+		case p == "/pdp" || strings.HasPrefix(p, "/pdp/") ||
+			p == "/piece" || strings.HasPrefix(p, "/piece/"):
+			publicMux.ServeHTTP(w, r)
+		case p == "/admin" || strings.HasPrefix(p, "/admin/"):
+			adminMux.ServeHTTP(w, r)
+		default:
+			inner.ServeHTTP(w, r)
+		}
+	})
+}
+
+// waitAndShutdownSingle handles the signal-wait + ordered teardown for
+// single-port back-compat mode (one *http.Server).
+func waitAndShutdownSingle(rootCtx context.Context, srv *http.Server, serveErr chan error, eng *engine.Engine, lanternDaemon *lantern.Daemon) error {
+	fmt.Printf("\ncurio-core is running. Ctrl-C to stop.\n")
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case s := <-sig:
+		fmt.Printf("\nreceived %s; shutting down...\n", s)
+	case err := <-serveErr:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "http server error: %v\n", err)
+		}
+	}
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	_ = srv.Shutdown(shutdownCtx)
+	if lanternDaemon != nil {
+		if err := lanternDaemon.Stop(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "lantern stop: %v\n", err)
+		}
+	}
+	if err := eng.Stop(); err != nil {
+		return fmt.Errorf("engine.Stop: %w", err)
+	}
 	fmt.Printf("Stopped cleanly.\n")
 	return nil
 }
