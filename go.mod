@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/Reiers/lantern v1.7.14
+	github.com/Reiers/lantern v1.7.15
 	github.com/curiostorage/harmonyquery v1.0.2
 	github.com/ethereum/go-ethereum v1.17.2
 	github.com/filecoin-project/curio v1.28.2-0.20260522154309-2153109777fa
