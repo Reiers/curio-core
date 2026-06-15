@@ -89,6 +89,11 @@ type Engine struct {
 	// drained in Stop. nil outside the running window.
 	te *harmonytask.TaskEngine
 
+	// notify is the built-in PDPv0_Notify task. Stored so NotifyKick can
+	// wake its poll loop on demand (the wake-at-write path, #67).
+	// Constructed in Start; nil before then.
+	notify *pdpv0.PDPNotifyTask
+
 	// chainSched is the tipset-subscription event loop the pdpv0
 	// watcher tasks attach to. SetChainSched installs it before
 	// Start so the engine takes ownership of Run() + cancel-on-Stop.
@@ -171,6 +176,18 @@ func New(ctx context.Context, cfg Config) (*Engine, error) {
 // setup webui) without re-opening the file.
 func (e *Engine) DB() *harmonysqlite.DB { return e.db }
 
+// NotifyKick wakes the built-in PDPv0_Notify task to scan for ready
+// uploads immediately, bypassing its poll interval. Safe to call any
+// time, including before Start (no-op until the notify task exists).
+// Pass this to parkcomplete.NewWithWake so a freshly-completed piece
+// triggers finalization within ~ms instead of waiting two stacked poll
+// cycles (curio-core#67).
+func (e *Engine) NotifyKick() {
+	if e.notify != nil {
+		e.notify.Kick()
+	}
+}
+
 // TaskEngine returns the underlying harmonytask.TaskEngine after Start().
 // Returns nil before Start() is called. Used by main.go to construct
 // runtime watchers (e.g. message.MessageWatcherEth) that need to assign
@@ -244,6 +261,7 @@ func (e *Engine) Start(ctx context.Context, extraTasks ...harmonytask.TaskInterf
 	// scheduler driving it. Heavier pdpv0 tasks (Prove, NextPP, etc.)
 	// wire in as their chain-API/sender/indexstore deps come online.
 	notify := pdpv0.NewPDPNotifyTask(ctx, e.db)
+	e.notify = notify
 	impls := []harmonytask.TaskInterface{notify}
 	impls = append(impls, extraTasks...)
 

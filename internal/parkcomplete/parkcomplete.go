@@ -59,6 +59,14 @@ type Task struct {
 	// storage. Used by the safety-net file-exists check before flipping
 	// a piece's complete bit.
 	stashDir string
+
+	// onComplete, if non-nil, is called once per batch after at least one
+	// parked_pieces row was flipped to complete=TRUE. In single-binary
+	// curio-core this wakes PDPv0_Notify (via notify.Kick) inline so the
+	// finalize task fires within ~ms instead of waiting for the Notify
+	// poll cycle — the wake-at-write optimization (curio-core#67). nil is
+	// safe (the Notify ticker poll remains the fallback).
+	onComplete func()
 }
 
 // PollInterval is how often the task fires when there are no
@@ -72,6 +80,15 @@ const PollInterval = 5 * time.Second
 // net.
 func New(db harmonyquery.DBInterface, stashDir string) *Task {
 	return &Task{db: db, stashDir: stashDir}
+}
+
+// NewWithWake is New plus an onComplete callback fired after a batch
+// flips at least one piece to complete. curio-core passes notify.Kick
+// here so the PDPv0_Notify finalize task wakes immediately instead of
+// waiting for its own poll cycle (curio-core#67). onComplete must be
+// non-blocking and safe to call from the task goroutine.
+func NewWithWake(db harmonyquery.DBInterface, stashDir string, onComplete func()) *Task {
+	return &Task{db: db, stashDir: stashDir, onComplete: onComplete}
 }
 
 // Do is the harmonytask body. Processes up to BatchSize candidate
@@ -147,6 +164,13 @@ func (t *Task) Do(ctx context.Context, taskID harmonytask.TaskID, stillOwned fun
 
 	if completed > 0 {
 		log.Infow("parkcomplete: batch done", "completed", completed, "candidates", len(candidates))
+		// Wake-at-write (curio-core#67): a piece just became complete, so
+		// kick PDPv0_Notify to scan now instead of waiting for its poll
+		// tick. Single-binary only: same process owns both the write and
+		// the Notify poll loop, so this is a pure in-process accelerator.
+		if t.onComplete != nil {
+			t.onComplete()
+		}
 	}
 	return true, nil
 }

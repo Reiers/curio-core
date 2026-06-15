@@ -463,7 +463,12 @@ Flags:
 	// ffi.SealCalls + paths.Remote (cluster-aware bytes-copy); we
 	// don't need that because stash IS our long-term storage.
 	// See internal/parkcomplete for the rationale.
-	parkComplete := parkcomplete.New(eng.DB(), stashDir)
+	// Wake-at-write (#67): pass eng.NotifyKick so a completed piece wakes
+	// PDPv0_Notify inline instead of waiting for its poll cycle. NotifyKick
+	// is nil-safe before engine.Start constructs the notify task, and is
+	// only ever *invoked* at runtime (during parkComplete.Do), well after
+	// Start, so the deferred indirection is safe.
+	parkComplete := parkcomplete.NewWithWake(eng.DB(), stashDir, eng.NotifyKick)
 	extraTasks = append(extraTasks, parkComplete)
 
 	// PaymentSettle: discovers + settles USDFC payment rails for the
