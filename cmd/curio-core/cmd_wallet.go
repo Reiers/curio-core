@@ -334,7 +334,7 @@ var selErc20Transfer = mustSelector("transfer(address,uint256)")
 func cmdWalletSend(args []string) error {
 	fs := flag.NewFlagSet("wallet send", flag.ExitOnError)
 	asset := fs.String("asset", "fil", "asset to send (fil | usdfc)")
-	daemon := fs.String("daemon", "http://127.0.0.1:14994", "daemon base URL (/admin/test-tx will be appended)")
+	daemon := fs.String("daemon", "http://127.0.0.1:4711", "daemon base URL (/admin/test-tx will be appended)")
 	network := fs.String("network", "calibration", "network (calibration | mainnet) — used to resolve USDFC contract address")
 	dryRun := fs.Bool("dry-run", false, "print the tx payload without submitting")
 	fs.Parse(args)

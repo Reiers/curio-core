@@ -1,7 +1,7 @@
 # First-run setup
 
 When you launch `curio-core run` for the first time, a setup wizard is available at
-**http://127.0.0.1:14994/setup**.
+**http://127.0.0.1:4711/setup**.
 
 ::: tip Optional
 First-run setup is **not mandatory** — the wallet and embedded chain client bootstrap

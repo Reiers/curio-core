@@ -201,7 +201,7 @@ CGO_ENABLED=0 go build -o curio-core ./cmd/curio-core
 ./curio-core probe --network calibration --timeout 30s
 
 # run (full daemon)
-./curio-core run --network calibration --data-dir ~/.curio-core --listen 127.0.0.1:14994
+./curio-core run --network calibration --data-dir ~/.curio-core --listen 127.0.0.1:4711
 ```
 
 ### Operator CLIs (no daemon needed)
@@ -229,7 +229,7 @@ curio-core run: starting daemon
   data-dir: /home/op/.curio-core
   network:  calibration
   db-path:  /home/op/.curio-core/state.sqlite
-  listen:   127.0.0.1:14994
+  listen:   127.0.0.1:4711
   lantern:  anchored at epoch 3745971
   lantern:  rpc at http://127.0.0.1:41763/rpc/v1 (in-process)
   lantern:  vm-bridge -> https://api.calibration.node.glif.io/rpc/v1
@@ -247,7 +247,7 @@ curio-core run: starting daemon
 
 ### Operator dashboard
 
-A full operator dashboard ships in the binary at `http://127.0.0.1:14994/`:
+A full operator dashboard ships in the binary at `http://127.0.0.1:4711/`:
 
 - **Overview** — chain head, dataset count, pieces stored, active rails, 24h proof stats, scheduler health
 - **Wallets** — live tFIL + USDFC balances, FIL/USDFC send form
@@ -258,7 +258,7 @@ A full operator dashboard ships in the binary at `http://127.0.0.1:14994/`:
 - **Upload** — client-facing 2-phase streaming upload with XHR progress bar
 - **Terminal** — allowlisted curio-core CLI runner (`version`, `wallet list`, `doctor`, `sp info`, `probe`, `config show`)
 
-Loopback-only by design. Access via SSH tunnel: `ssh -L 14994:127.0.0.1:14994 your-sp-host`.
+Loopback-only by design. Access via SSH tunnel: `ssh -L 4711:127.0.0.1:4711 your-sp-host`.
 
 See the [dashboard tour](https://curio-core-docs.pages.dev/operating/dashboard) in the docs for the full walkthrough.
 
@@ -275,14 +275,14 @@ curl -X PUT --data-binary @file.bin https://sp.example.com$LOC
 ### Get the SP's wallet
 
 ```sh
-curl http://127.0.0.1:14994/admin/eth-key
+curl http://127.0.0.1:4711/admin/eth-key
 # {"address":"0x6b4758...833c","role":"pdp"}
 ```
 
 ### Trigger a test on-chain transaction
 
 ```sh
-curl -X POST http://127.0.0.1:14994/admin/test-tx -d '{}'
+curl -X POST http://127.0.0.1:4711/admin/test-tx -d '{}'
 # {"txHash":"0x4f350...","from":"0x6b4758...833c"}
 ```
 

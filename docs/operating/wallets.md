@@ -42,7 +42,7 @@ curio-core wallet send --asset usdfc --dry-run 0x<to-address> 10
 Amount is decimal in display units. FIL and USDFC both use 18 decimals on EVM rails,
 so `1.5` → `1500000000000000000` base units in either case.
 
-The `--daemon` flag overrides the daemon URL (default `http://127.0.0.1:14994`); the
+The `--daemon` flag overrides the daemon URL (default `http://127.0.0.1:4711`); the
 `--network` flag picks the USDFC contract address (calibration vs mainnet).
 
 `wallet send` **requires** the daemon to be running because it routes through

@@ -1,6 +1,6 @@
 # HTTP API reference
 
-Curio Core listens on a single port (default `127.0.0.1:14994`) with four route
+Curio Core listens on a single port (default `127.0.0.1:4711`) with four route
 prefixes:
 
 | Prefix | Purpose | Auth |

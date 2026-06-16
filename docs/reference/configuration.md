@@ -22,7 +22,7 @@ MinerID       = "f0..."
 ```
 
 These are required identifiers for the SP. The `/setup` wizard at
-`http://127.0.0.1:14994/setup` writes the row; you can also edit it via:
+`http://127.0.0.1:4711/setup` writes the row; you can also edit it via:
 
 ```sql
 -- Inspect

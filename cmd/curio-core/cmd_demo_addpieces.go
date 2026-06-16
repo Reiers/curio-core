@@ -93,7 +93,7 @@ func cmdDemoAddPieces(args []string) error {
 	fs.Var(&metaFlags, "metadata", "metadata entry key=value (repeatable, applied to all pieces uniformly)")
 	dataDir := fs.String("data-dir", defaultDataDir(), "curio-core data directory")
 	network := fs.String("network", "calibration", "network (calibration|mainnet)")
-	daemon := fs.String("daemon", "http://127.0.0.1:14994", "daemon base URL")
+	daemon := fs.String("daemon", "http://127.0.0.1:4711", "daemon base URL")
 	dryRun := fs.Bool("dry-run", false, "print payload without POSTing")
 	if err := fs.Parse(args); err != nil {
 		return err

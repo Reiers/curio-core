@@ -6,7 +6,7 @@ full shell — only a fixed allowlist of read-only curio-core subcommands can be
 ## Why an allowlist
 
 A real in-browser shell is a massive auth/RCE surface. Curio Core is loopback-only
-today with no auth layer; anyone with network access to port 14994 effectively owns
+today with no auth layer; anyone with network access to port 4711 effectively owns
 the box if they can run arbitrary commands. The allowlist is the security model.
 
 For mutations (`wallet new`, `wallet send`, `demo *`, `sp register`), SSH into the host

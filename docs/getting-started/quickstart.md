@@ -85,7 +85,7 @@ sudo chown $(whoami) /var/lib/curio-core
 curio-core run \
   --data-dir /var/lib/curio-core \
   --network calibration \
-  --listen 127.0.0.1:14994
+  --listen 127.0.0.1:4711
 ```
 
 On first run, curio-core:
@@ -95,7 +95,7 @@ On first run, curio-core:
    `/var/lib/curio-core/calibration/headerstore`).
 3. Bootstraps a fresh secp256k1 PDP wallet in `eth_keys` (role=`pdp`).
 4. Starts the harmonytask engine.
-5. Listens on `127.0.0.1:14994`.
+5. Listens on `127.0.0.1:4711`.
 
 The console prints the PDP wallet address. **Copy it.**
 
@@ -114,7 +114,7 @@ For USDFC accumulation flows on the **client** side, the
 ## 4. Visit the dashboard
 
 ```
-http://127.0.0.1:14994/
+http://127.0.0.1:4711/
 ```
 
 You should see:
@@ -127,7 +127,7 @@ You should see:
 
 curio-core terminates TLS itself — **no nginx required**. It runs a two-port model:
 
-- **Admin port** (`--admin-listen`, default `127.0.0.1:14994`): dashboard, `/setup`,
+- **Admin port** (`--admin-listen`, default `127.0.0.1:4711`): dashboard, `/setup`,
   `/admin/*`. Loopback-only; never exposed publicly.
 - **Public port** (`--public-listen`): `/pdp/*` + `/piece/*`. Gets a LetsEncrypt cert
   automatically via baked-in [`autocert`](https://pkg.go.dev/golang.org/x/crypto/acme/autocert).
@@ -142,7 +142,7 @@ To receive client traffic:
 curio-core run \
   --data-dir /var/lib/curio-core \
   --network calibration \
-  --admin-listen 127.0.0.1:14994 \
+  --admin-listen 127.0.0.1:4711 \
   --public-listen 0.0.0.0:443 \
   --public-tls-domain sp.example.com
 ```

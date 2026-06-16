@@ -32,7 +32,7 @@ cd curio-core
 CGO_ENABLED=0 go build -o curio-core ./cmd/curio-core
 
 # Run on calibration with a temp data dir
-./curio-core run --data-dir /tmp/curio-core-dev --network calibration --listen 127.0.0.1:14994
+./curio-core run --data-dir /tmp/curio-core-dev --network calibration --listen 127.0.0.1:4711
 ```
 
 The Go module pulls in our patched `Reiers/curio` fork via a `replace` directive in

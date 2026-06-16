@@ -29,7 +29,7 @@
 //	    [--record-keeper <0x...>]        defaults to network FWSS proxy
 //	    [--metadata key=value ...]       repeatable metadata
 //	    [--client-dataset-id <uint>]     EIP-712 nonce (default: random uint256)
-//	    [--daemon <url>]                 default http://127.0.0.1:14994
+//	    [--daemon <url>]                 default http://127.0.0.1:4711
 //	    [--network <name>]               default calibration
 //	    [--data-dir <path>]              default ~/.curio-core
 //	    [--dry-run]                      print payload, do not POST
@@ -106,7 +106,7 @@ Flags (for create-dataset):
   --record-keeper <0x...>             default: network FWSS proxy
   --metadata key=value                 metadata entry (repeatable)
   --client-dataset-id <uint>          EIP-712 nonce (default: random uint256)
-  --daemon <url>                      daemon base URL (default: http://127.0.0.1:14994)
+  --daemon <url>                      daemon base URL (default: http://127.0.0.1:4711)
   --network <name>                    calibration|mainnet (default: calibration)
   --data-dir <path>                   curio-core data directory (default: ~/.curio-core)
   --dry-run                           print payload, do not POST
@@ -182,7 +182,7 @@ func cmdDemoCreateDataSet(args []string) error {
 	fs := flag.NewFlagSet("demo create-dataset", flag.ExitOnError)
 	dataDir := fs.String("data-dir", defaultDataDir(), "curio-core data directory")
 	network := fs.String("network", "calibration", "network (calibration|mainnet)")
-	daemon := fs.String("daemon", "http://127.0.0.1:14994", "daemon base URL")
+	daemon := fs.String("daemon", "http://127.0.0.1:4711", "daemon base URL")
 	clientAddrStr := fs.String("client-addr", "", "signer address (default: first 'pdp' wallet)")
 	recordKeeperStr := fs.String("record-keeper", "", "record-keeper contract (default: network FWSS proxy)")
 	clientDataSetIDStr := fs.String("client-dataset-id", "", "EIP-712 nonce (default: random uint256)")

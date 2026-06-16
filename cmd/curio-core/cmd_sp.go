@@ -206,7 +206,7 @@ func cmdSPRegister(args []string) error {
 	paymentToken := fs.String("payment-token", "0x0000000000000000000000000000000000000000", "Payment token contract address (0x0 = native FIL)")
 	dryRun := fs.Bool("dry-run", false, "Print calldata + do NOT broadcast")
 	submit := fs.Bool("submit", false, "Broadcast via the running curio-core daemon's /admin/test-tx (requires daemon running)")
-	adminEndpoint := fs.String("admin-endpoint", "http://127.0.0.1:14994", "curio-core daemon admin endpoint (loopback)")
+	adminEndpoint := fs.String("admin-endpoint", "http://127.0.0.1:4711", "curio-core daemon admin endpoint (loopback)")
 	fs.Parse(args)
 
 	if *name == "" || *description == "" {

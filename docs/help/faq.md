@@ -90,10 +90,10 @@ Production auth is on the roadmap.
 For now, reach the dashboard via SSH tunnel:
 
 ```bash
-ssh -L 14994:127.0.0.1:14994 your-sp-host
+ssh -L 4711:127.0.0.1:4711 your-sp-host
 ```
 
-Then open <http://127.0.0.1:14994/> in your browser.
+Then open <http://127.0.0.1:4711/> in your browser.
 
 ## Open source license?
 

@@ -35,7 +35,7 @@ import (
 // Config configures the two-port server set.
 type Config struct {
 	// AdminListen is the loopback bind for the operator UI/admin surface
-	// (e.g. "127.0.0.1:14994").
+	// (e.g. "127.0.0.1:4711").
 	AdminListen string
 
 	// PublicListen is the bind for the public synapse-sdk + retrieval

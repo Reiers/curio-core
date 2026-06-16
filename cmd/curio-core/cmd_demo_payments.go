@@ -111,7 +111,7 @@ func cmdDemoPrepareClientPayments(args []string) error {
 	fs := flag.NewFlagSet("demo prepare-client-payments", flag.ContinueOnError)
 	dataDir := fs.String("data-dir", defaultDataDir(), "curio-core data directory")
 	network := fs.String("network", "calibration", "network (calibration|mainnet)")
-	daemon := fs.String("daemon", "http://127.0.0.1:14994", "daemon base URL (/admin/test-tx will be appended)")
+	daemon := fs.String("daemon", "http://127.0.0.1:4711", "daemon base URL (/admin/test-tx will be appended)")
 	depositAmount := fs.String("deposit", "1", "USDFC amount to deposit (decimal USDFC, default 1 USDFC = 1e18 base units)")
 	dryRun := fs.Bool("dry-run", false, "print all three tx payloads without submitting")
 	submit := fs.Bool("submit", false, "POST all three txes to the daemon's /admin/test-tx endpoint")

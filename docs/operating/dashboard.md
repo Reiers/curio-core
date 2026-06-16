@@ -1,6 +1,6 @@
 # Dashboard tour
 
-The Curio Core dashboard lives at `http://127.0.0.1:14994/` (default listen address).
+The Curio Core dashboard lives at `http://127.0.0.1:4711/` (default listen address).
 It's the single pane of glass for operating the SP — chain head, datasets, rails,
 wallets, tasks, alerts, upload, terminal.
 
@@ -8,8 +8,8 @@ wallets, tasks, alerts, upload, terminal.
 Today the dashboard binds **loopback** with no auth. Reach it via SSH tunnel:
 
 ```bash
-ssh -L 14994:127.0.0.1:14994 your-sp-host
-# then open http://127.0.0.1:14994/ in your browser
+ssh -L 4711:127.0.0.1:4711 your-sp-host
+# then open http://127.0.0.1:4711/ in your browser
 ```
 
 A production auth layer is on the roadmap. Until then, **do not** expose the

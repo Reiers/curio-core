@@ -20,7 +20,7 @@ Flags:
 |---|---|---|
 | `--data-dir` | `~/.curio-core` | Persistent state directory (SQLite + Lantern + stash) |
 | `--network` | (from build) | `calibration` or `mainnet` |
-| `--listen` | `127.0.0.1:14994` | Deprecated alias for `--admin-listen` |
+| `--listen` | `127.0.0.1:4711` | Deprecated alias for `--admin-listen` |
 | `--admin-listen` | (falls back to `--listen`) | Loopback admin/UI surface: dashboard, `/setup`, `/admin/*` |
 | `--public-listen` | (empty = single-port) | Public surface: `/pdp/*` + `/piece/*`. Empty keeps everything on the admin port |
 | `--public-tls-domain` | (empty) | Domain for baked-in `autocert` TLS on the public port. Empty serves plaintext (dev) and refuses `:443` |

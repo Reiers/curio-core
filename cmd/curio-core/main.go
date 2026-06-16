@@ -369,7 +369,7 @@ Flags:
 			// Ephemeral loopback bind: embedded Lantern speaks /rpc/v1 to
 			// in-process consumers (nodeapi, ethclient) only. We never expose
 			// this port externally; nginx terminates client traffic at the
-			// curio-core listener (14994) which composes /pdp/* over the
+			// curio-core listener (default :4711) which composes /pdp/* over the
 			// upstream PDPService that itself talks to Lantern through this
 			// loopback. Port 0 avoids conflicts with a real standalone
 			// Lantern on the same host.

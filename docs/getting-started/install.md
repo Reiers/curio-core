@@ -50,7 +50,7 @@ Group=curio
 ExecStart=/usr/local/bin/curio-core run \
   --data-dir /var/lib/curio-core \
   --network calibration \
-  --listen 127.0.0.1:14994
+  --listen 127.0.0.1:4711
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

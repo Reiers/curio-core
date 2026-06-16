@@ -38,7 +38,7 @@ fi
 
 echo "curio-core installed."
 echo "  1) start:  sudo systemctl enable --now curio-core"
-echo "  2) setup:  open http://127.0.0.1:14994/setup"
+echo "  2) setup:  open http://127.0.0.1:4711/setup"
 echo "  3) docs:   https://curio-core-docs.pages.dev/"
 
 exit 0
