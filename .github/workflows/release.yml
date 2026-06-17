@@ -128,9 +128,29 @@ jobs:
                -o -name 'curio-core-*source.tar.gz*' \) \
             -exec cp {} release/ \;
           ls -1 release/
+      - name: Check out source for release notes
+        uses: actions/checkout@v4
+        with:
+          path: src
+          fetch-depth: 0
+      - name: Resolve release notes body
+        id: notes
+        run: |
+          set -euo pipefail
+          NOTES="src/RELEASE-NOTES-${GITHUB_REF_NAME}.md"
+          if [ -f "$NOTES" ]; then
+            echo "using hand-written notes: $NOTES"
+            echo "body_path=$NOTES" >> "$GITHUB_OUTPUT"
+            echo "generate=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "no hand-written notes; falling back to auto-generated"
+            echo "body_path=" >> "$GITHUB_OUTPUT"
+            echo "generate=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: release/*
-          generate_release_notes: true
+          body_path: ${{ steps.notes.outputs.body_path }}
+          generate_release_notes: ${{ steps.notes.outputs.generate }}
           fail_on_unmatched_files: true
