@@ -134,7 +134,7 @@ func (t *Task) Do(ctx context.Context, taskID harmonytask.TaskID, stillOwned fun
 		// Verify the stash file exists before flipping. Belt-and-braces
 		// against a DB referencing a stash UUID that's gone (operator
 		// wiped the stash dir, file got rm'd, etc).
-		stashPath, err := stashPathFromCustoreURL(c.DataURL, t.stashDir)
+		stashPath, err := StashPathFromCustoreURL(c.DataURL, t.stashDir)
 		if err != nil {
 			log.Warnw("parkcomplete: skip candidate (bad custore URL)",
 				"piece_id", c.PieceID, "data_url", c.DataURL, "err", err)
@@ -221,6 +221,14 @@ var _ = harmonytask.Reg(&Task{})
 // for a sanity-check: if the URL path doesn't sit inside stashDir,
 // the candidate is rejected (defense against malformed or attacker-
 // supplied data_url values).
+// StashPathFromCustoreURL is the exported form, reused by the stash
+// integrity/GC sweep (internal/stashsweep) so the custore://-URL ->
+// on-disk-path mapping (and its in-stashDir safety check) lives in one
+// place.
+func StashPathFromCustoreURL(dataURL, stashDir string) (string, error) {
+	return stashPathFromCustoreURL(dataURL, stashDir)
+}
+
 func stashPathFromCustoreURL(dataURL, stashDir string) (string, error) {
 	u, err := url.Parse(dataURL)
 	if err != nil {

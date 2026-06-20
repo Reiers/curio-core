@@ -54,6 +54,7 @@ import (
 	"github.com/Reiers/curio-core/internal/pdpwire"
 	"github.com/Reiers/curio-core/internal/retrieval"
 	"github.com/Reiers/curio-core/internal/setupweb"
+	"github.com/Reiers/curio-core/internal/stashsweep"
 
 	"github.com/filecoin-project/curio/harmony/harmonytask"
 	"github.com/filecoin-project/curio/lib/chainsched"
@@ -276,6 +277,9 @@ func cmdRun(args []string) error {
 	acmeHTTPAddr := fs.String("acme-http-listen", ":80", "Bind for the ACME HTTP-01 challenge + HTTP->HTTPS redirect (only used with --public-tls-domain). Empty disables the :80 listener.")
 	acmeDirectoryURL := fs.String("acme-directory-url", "", "Override the ACME directory URL (for LetsEncrypt staging / tests). Empty uses production.")
 	dataStorage := fs.String("data-storage", "", "Directory for piece data (diskstash). Empty = auto-discover: env CURIO_PDP_DATA/DATA_STORAGE/CURIO_DATA, then a folder named \"curio-pdp-data\" on any mounted disk, else <data-dir>/stash. Just `mkdir curio-pdp-data` on your data disk and curio-core finds it.")
+	stashGCEnable := fs.Bool("stash-gc", false, "Arm stash garbage-collection: reclaim orphaned (unreferenced) stash files older than --stash-gc-retention. Off by default = dry-run (logs candidates, deletes nothing). The integrity sweep (detecting complete pieces with missing files) always runs regardless.")
+	stashGCRetention := fs.Duration("stash-gc-retention", 24*time.Hour, "Minimum age before an orphaned stash file is GC-eligible (guards in-flight uploads). Only used with --stash-gc.")
+	stashSweepInterval := fs.Duration("stash-sweep-interval", time.Hour, "How often the stash integrity + GC sweep runs.")
 	noLantern := fs.Bool("no-lantern", false, "Skip the embedded Lantern daemon (engine + WebUI only; useful for first-run setup on a host without gateway access yet)")
 	lanternTimeout := fs.Duration("lantern-anchor-timeout", 30*time.Second, "Time to wait for Lantern to reach Started state during boot")
 	vmBridgeRPC := fs.String("vm-bridge-rpc", "", "Upstream Forest/Lotus JSON-RPC URL for FEVM forwarding (eth_call/eth_estimateGas/sendRawTransaction). Defaults per --network: calibration -> https://api.calibration.node.glif.io/rpc/v1, mainnet -> https://api.node.glif.io/rpc/v1. Pass an empty string with --vm-bridge-rpc-disable to disable.")
@@ -507,6 +511,34 @@ Flags:
 	// Start, so the deferred indirection is safe.
 	parkComplete := parkcomplete.NewWithWake(eng.DB(), stashDir, eng.NotifyKick)
 	extraTasks = append(extraTasks, parkComplete)
+
+	// StashSweep: the stash integrity + GC safety net (#89/#90). In
+	// curio-core's single-node shape the stash file IS the piece's
+	// long-term storage, so (a) a complete piece whose file vanished will
+	// FAULT on prove — we detect + flag it before challenge time; and
+	// (b) orphaned (unreferenced) stash files accumulate and fill the
+	// disk — GC reclaims them. Integrity always runs; GC is opt-in via
+	// --stash-gc (dry-run otherwise). Alerts bridge to /admin/alerts.
+	stashSweep := stashsweep.New(eng.DB(), stashsweep.Config{
+		StashDir:     stashDir,
+		PollInterval: *stashSweepInterval,
+		GCEnabled:    *stashGCEnable,
+		GCRetention:  *stashGCRetention,
+		AlertFn: func(ctx context.Context, source, message string, fields map[string]any) {
+			_, _ = alerts.Emit(ctx, eng.DB(), alerts.EmitArgs{
+				Source:  source,
+				Message: message,
+				Context: fields,
+			})
+		},
+	})
+	extraTasks = append(extraTasks, stashSweep)
+	gcMode := "dry-run"
+	if *stashGCEnable {
+		gcMode = "armed"
+	}
+	fmt.Printf("  stash:    integrity+GC sweep active (every %s, gc=%s, retention=%s)\n",
+		*stashSweepInterval, gcMode, *stashGCRetention)
 
 	// PaymentSettle: discovers + settles USDFC payment rails for the
 	// PDP-as-SP role. FilecoinWarmStorageService creates one rail per
