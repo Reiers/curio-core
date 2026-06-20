@@ -45,6 +45,7 @@ import (
 	"github.com/Reiers/curio-core/internal/alerts"
 	"github.com/Reiers/curio-core/internal/config"
 	"github.com/Reiers/curio-core/internal/dashboard"
+	"github.com/Reiers/curio-core/internal/datapath"
 	"github.com/Reiers/curio-core/internal/engine"
 	"github.com/Reiers/curio-core/internal/ethkeys"
 	"github.com/Reiers/curio-core/internal/httpserve"
@@ -274,6 +275,7 @@ func cmdRun(args []string) error {
 	publicTLSDomain := fs.String("public-tls-domain", "", "Domain for autocert (LetsEncrypt) TLS on the public port. Empty serves plaintext (dev only) and refuses to bind :443.")
 	acmeHTTPAddr := fs.String("acme-http-listen", ":80", "Bind for the ACME HTTP-01 challenge + HTTP->HTTPS redirect (only used with --public-tls-domain). Empty disables the :80 listener.")
 	acmeDirectoryURL := fs.String("acme-directory-url", "", "Override the ACME directory URL (for LetsEncrypt staging / tests). Empty uses production.")
+	dataStorage := fs.String("data-storage", "", "Directory for piece data (diskstash). Empty = auto-discover: env CURIO_PDP_DATA/DATA_STORAGE/CURIO_DATA, then a folder named \"curio-pdp-data\" on any mounted disk, else <data-dir>/stash. Just `mkdir curio-pdp-data` on your data disk and curio-core finds it.")
 	noLantern := fs.Bool("no-lantern", false, "Skip the embedded Lantern daemon (engine + WebUI only; useful for first-run setup on a host without gateway access yet)")
 	lanternTimeout := fs.Duration("lantern-anchor-timeout", 30*time.Second, "Time to wait for Lantern to reach Started state during boot")
 	vmBridgeRPC := fs.String("vm-bridge-rpc", "", "Upstream Forest/Lotus JSON-RPC URL for FEVM forwarding (eth_call/eth_estimateGas/sendRawTransaction). Defaults per --network: calibration -> https://api.calibration.node.glif.io/rpc/v1, mainnet -> https://api.node.glif.io/rpc/v1. Pass an empty string with --vm-bridge-rpc-disable to disable.")
@@ -440,7 +442,19 @@ Flags:
 	// files into. Hoisted here so BuildChainDeps can construct the
 	// local piece-park reader (which serves the same files to
 	// cachedreader's piece-park fallback path).
-	stashDir := filepath.Join(*dataDir, "stash")
+	//
+	// Zero-config: if --data-storage is unset and no env override is
+	// present, we auto-discover a folder named "curio-pdp-data" on any
+	// mounted disk (preferring the one with the most free space) so a
+	// fresh operator never has to configure a path. Falls back to the
+	// historical <data-dir>/stash.
+	dpRes := datapath.Resolve(*dataStorage, filepath.Join(*dataDir, "stash"))
+	stashDir, err := datapath.EnsureDir(dpRes.Path)
+	if err != nil {
+		_ = eng.Stop()
+		return fmt.Errorf("prepare data storage %q (source %s): %w", dpRes.Path, dpRes.Source, err)
+	}
+	fmt.Printf("  storage:  piece data -> %s (%s)\n", stashDir, dpRes.Source)
 
 	// --- Chain deps: ethclient + nodeapi + SenderETH + the proof loop ---
 	chainDeps, err := pdpwire.BuildChainDeps(rootCtx, eng.DB(), stashDir, lanternDaemon)
