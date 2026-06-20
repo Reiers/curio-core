@@ -1,14 +1,15 @@
 // Command curio-core is the PDP-only Curio + embedded Lantern bundle.
 //
-// Pre-alpha. The current binary exercises only the Lantern embedding:
-// it starts an embedded daemon, prints the anchored chain head, and
-// shuts down. This is the bones for the full integration that lands
-// over subsequent commits — see docs/PLAN.md and Reiers/lantern#11.
+// Alpha (v0.1.0-alpha.2). The binary runs a full PDP node: embedded
+// Lantern, SQLite state, the harmonytask PDPv0 pipeline, and the
+// /pdp + /admin HTTP surfaces. The full deal+prove loop is
+// self-sustaining on calibration; mainnet is wired and being proven.
+// See internal-notes/STATUS.md.
 //
-// Subcommands (planned):
+// Subcommands:
 //
 //	curio-core run    — start the full PDP node (Lantern + PDP tasks + DB)
-//	curio-core init   — first-run wizard (wallet, miner ID, market addr)
+//	curio-core config — headless first-run setup (wallet, miner ID, market addr)
 //
 // Today only `curio-core probe` works (single hard-coded smoke test).
 
@@ -59,8 +60,9 @@ import (
 )
 
 // versionTag is set at build time via -ldflags "-X main.versionTag=<tag>".
-// Falls back to the baked-in pre-alpha string for `go build`/`go run`.
-var versionTag = "0.0.1-prealpha"
+// Falls back to the baked-in dev string for `go build`/`go run`;
+// real releases inject the actual tag (e.g. v0.1.0-alpha.2).
+var versionTag = "0.1.0-alpha.2-dev"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -122,7 +124,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `curio-core (pre-alpha)
+	fmt.Fprint(os.Stderr, `curio-core (alpha)
 
   PDP-only Curio + embedded Lantern, single pure-Go binary.
 
