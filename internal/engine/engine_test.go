@@ -144,6 +144,50 @@ func TestBuildTaskRegistry_Standalone(t *testing.T) {
 	}
 }
 
+// TestRegistry_GABlockerTasksStayUnregistered is a structural guard for
+// the curio-core "we beat Curio at scale" invariants (#87). Three upstream
+// pdpv0 task names exist in tasks/tasknames but are DELIBERATELY not wired
+// into BuildTaskRegistry, because each one is the direct cause of an open
+// upstream Curio GA-blocker:
+//
+//   - PDPv0_PieceGC  -> filecoin-project/curio#1303: the 24h PieceGC window
+//                       destroys uploaded-but-uncommitted pieces when commits
+//                       lag uploads. Not registered => cannot happen here.
+//   - PDPv0_Cleanup  -> filecoin-project/curio#1296: an un-includable
+//                       cleanupPieces tx wedges the sender nonce queue and
+//                       permanently breaks ProvPeriod after restart. The
+//                       feature is absent => no such tx is ever produced.
+//   - PDPv0_IPNI     -> filecoin-project/curio#1291: PDPv0_IPNI Max(50)
+//                       storms YugabyteDB with 40001 serialization conflicts
+//                       and strands piecerefs. Not registered (and SQLite has
+//                       no 40001 class anyway).
+//
+// If a future fork bump or refactor silently re-registers any of these, this
+// test fails LOUDLY. Re-enabling one must be a deliberate, reviewed edit that
+// also reckons with the GA-blocker it reintroduces.
+func TestRegistry_GABlockerTasksStayUnregistered(t *testing.T) {
+	r, err := BuildTaskRegistry()
+	if err != nil {
+		t.Fatalf("BuildTaskRegistry: %v", err)
+	}
+
+	forbidden := []struct {
+		name    string
+		upstream string
+	}{
+		{tasknames.PDPv0_PieceGC, "filecoin-project/curio#1303 (PieceGC destroys uncommitted pieces)"},
+		{tasknames.PDPv0_Cleanup, "filecoin-project/curio#1296 (cleanupPieces nonce wedge)"},
+		{tasknames.PDPv0_IPNI, "filecoin-project/curio#1291 (IPNI 40001 serialization storm)"},
+	}
+	for _, f := range forbidden {
+		if r.Has(f.name) {
+			t.Errorf("GA-blocker invariant violated: task %q is registered; "+
+				"it reintroduces %s. Re-enabling must be deliberate — see #87.",
+				f.name, f.upstream)
+		}
+	}
+}
+
 // TestDefaultDBPath_RespectsXDG asserts the XDG override is honoured.
 func TestDefaultDBPath_RespectsXDG(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "/tmp/curio-core-xdg-test")
