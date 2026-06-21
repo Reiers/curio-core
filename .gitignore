@@ -7,6 +7,10 @@
 *.sqlite
 *.sqlite-journal
 
+# Internal-only working notes, strategy docs, competitive analysis, draft
+# correspondence, dashboard screenshots. NEVER track these in the public repo.
+/internal-notes/
+
 # Editor / OS noise
 .DS_Store
 .vscode/
