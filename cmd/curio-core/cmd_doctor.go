@@ -129,6 +129,16 @@ func reportSQLiteState(ctx context.Context, db *harmonysqlite.DB) error {
 	fmt.Printf("  parked_pieces (total):         %d\n", parked)
 	fmt.Printf("  parked_pieces (complete):      %d\n", parkedComplete)
 
+	// Stash-integrity: complete pieces whose backing file is gone (#89).
+	// A non-zero count here is a latent proof-fault risk on mainnet.
+	var integrityMissing int
+	_ = db.QueryRowI(ctx, `SELECT COUNT(*) FROM parked_pieces WHERE integrity_missing_at IS NOT NULL`).Scan(&integrityMissing)
+	flag := ""
+	if integrityMissing > 0 {
+		flag = "  <-- LATENT PROOF FAULTS; investigate (#89)"
+	}
+	fmt.Printf("  stash-integrity missing files: %d%s\n", integrityMissing, flag)
+
 	// Piecerefs
 	var piecerefs int
 	_ = db.QueryRowI(ctx, `SELECT COUNT(*) FROM pdp_piecerefs`).Scan(&piecerefs)

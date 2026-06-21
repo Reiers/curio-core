@@ -50,6 +50,7 @@ import (
 	"github.com/Reiers/curio-core/internal/ethkeys"
 	"github.com/Reiers/curio-core/internal/httpserve"
 	"github.com/Reiers/curio-core/internal/parkcomplete"
+	"github.com/Reiers/curio-core/internal/stashintegrity"
 	"github.com/Reiers/curio-core/internal/payments"
 	"github.com/Reiers/curio-core/internal/pdpwire"
 	"github.com/Reiers/curio-core/internal/retrieval"
@@ -507,6 +508,14 @@ Flags:
 	// Start, so the deferred indirection is safe.
 	parkComplete := parkcomplete.NewWithWake(eng.DB(), stashDir, eng.NotifyKick)
 	extraTasks = append(extraTasks, parkComplete)
+
+	// StashIntegrity (#89): periodic safety-net sweep that detects
+	// complete=1 pieces whose stash file vanished, BEFORE the proving
+	// loop faults on them. Marks (never deletes) + alerts. No chain RPC,
+	// no FFI. Same single-node rationale as parkcomplete: stash IS
+	// long-term storage, so a missing stash file = a latent proof fault.
+	stashIntegrity := stashintegrity.New(eng.DB(), stashDir)
+	extraTasks = append(extraTasks, stashIntegrity)
 
 	// PaymentSettle: discovers + settles USDFC payment rails for the
 	// PDP-as-SP role. FilecoinWarmStorageService creates one rail per
