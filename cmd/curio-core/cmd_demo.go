@@ -356,7 +356,7 @@ func cmdDemoCreateDataSet(args []string) error {
 		parts := strings.Split(loc, "/")
 		if len(parts) > 0 {
 			txHash := parts[len(parts)-1]
-			fmt.Printf("  Watch on calibration:  https://calibration.filfox.info/en/message/%s\n", txHash)
+			fmt.Printf("  Watch:                 %s\n", explorerMessageURL(*network, txHash))
 			fmt.Printf("  Poll dataset status:   curl %s%s\n", strings.TrimRight(*daemon, "/"), loc)
 		}
 	}
@@ -425,4 +425,18 @@ func randUint256() (*big.Int, error) {
 		return nil, err
 	}
 	return new(big.Int).SetBytes(b[:]), nil
+}
+
+// explorerMessageURL returns the Filfox block-explorer URL for a message
+// hash on the given network. Mainnet uses filfox.info; calibration uses
+// the calibration. subdomain. Unknown networks fall back to mainnet
+// filfox (the safer default than mislabelling everything "calibration").
+// (curio-core: fixes the hardcoded-calibration display bug.)
+func explorerMessageURL(network, txHash string) string {
+	switch network {
+	case "calibration":
+		return "https://calibration.filfox.info/en/message/" + txHash
+	default: // mainnet and anything else
+		return "https://filfox.info/en/message/" + txHash
+	}
 }

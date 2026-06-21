@@ -308,8 +308,8 @@ func cmdSPRegister(args []string) error {
 		fmt.Println("  curio-core sp register --submit  (with the same args minus --dry-run)")
 		fmt.Println()
 		fmt.Println("To submit manually with cast (foundry):")
-		fmt.Printf("  cast send %s 0x%x \\\n    --value 5ether \\\n    --rpc-url <calibration-rpc> --private-key <pdp-key>\n",
-			registryAddr.Hex(), calldata)
+		fmt.Printf("  cast send %s 0x%x \\\n    --value 5ether \\\n    --rpc-url <%s-rpc> --private-key <pdp-key>\n",
+			registryAddr.Hex(), calldata, *network)
 		return nil
 	}
 
@@ -350,8 +350,8 @@ func cmdSPRegister(args []string) error {
 	fmt.Printf("  txHash:                        %s\n", adminResp.TxHash)
 	fmt.Printf("  from:                          %s\n", adminResp.From)
 	fmt.Println()
-	fmt.Println("Watch the tx on calibration block explorer:")
-	fmt.Printf("  https://calibration.filfox.info/en/message/%s\n", adminResp.TxHash)
+	fmt.Println("Watch the tx on the block explorer:")
+	fmt.Printf("  %s\n", explorerMessageURL(*network, adminResp.TxHash))
 	fmt.Println()
 	fmt.Println("Or query: curio-core sp info  (once the tx confirms, ~1-2 minutes)")
 	return nil

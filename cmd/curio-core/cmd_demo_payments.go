@@ -218,7 +218,7 @@ func cmdDemoPrepareClientPayments(args []string) error {
 			return fmt.Errorf("[%d/3] submit %s: %w", i+1, t.name, err)
 		}
 		fmt.Printf("       txHash: %s\n", txHash)
-		fmt.Printf("       watch:  https://calibration.filfox.info/en/message/%s\n", txHash)
+		fmt.Printf("       watch:  %s\n", explorerMessageURL(*network, txHash))
 		// Give the chain a few seconds to absorb before the next one
 		// (each tx changes state the next one depends on).
 		if i < len(plan)-1 {

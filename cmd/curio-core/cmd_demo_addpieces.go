@@ -312,7 +312,7 @@ func cmdDemoAddPieces(args []string) error {
 		parts := strings.Split(loc, "/")
 		if len(parts) > 0 {
 			txHash := parts[len(parts)-1]
-			fmt.Printf("  Watch on calibration:  https://calibration.filfox.info/en/message/%s\n", txHash)
+			fmt.Printf("  Watch:                 %s\n", explorerMessageURL(*network, txHash))
 		}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
