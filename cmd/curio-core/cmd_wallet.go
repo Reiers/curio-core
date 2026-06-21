@@ -61,6 +61,8 @@ func cmdWallet(args []string) error {
 		return cmdWalletDelete(rest)
 	case "send":
 		return cmdWalletSend(rest)
+	case "get-usdfc":
+		return cmdWalletGetUSDFC(rest)
 	case "-h", "--help", "help":
 		walletUsage()
 		return nil
@@ -83,6 +85,11 @@ Subcommands:
   role <addr> <new-role>              Change a wallet's role.
   delete [--yes] <addr>               Remove a wallet (requires --yes).
   send [--asset fil|usdfc] <to> <amount>  Broadcast a value transfer (requires running daemon).
+  get-usdfc --amount <n> [--from-chain base] [--submit]
+                                      Headlessly acquire USDFC by bridging USDC from
+                                      another chain via Squid (no browser). Quote-only
+                                      unless --submit. Needs CURIO_SQUID_INTEGRATOR_ID
+                                      + CURIO_RPC_<CHAIN> for the source chain.
 
 Note: standard Go flag parsing — all --flags must come BEFORE positional
 args. e.g.  curio-core wallet delete --yes --data-dir /path 0xabc...
