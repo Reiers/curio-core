@@ -50,6 +50,7 @@ import (
 	"github.com/Reiers/curio-core/internal/ethkeys"
 	"github.com/Reiers/curio-core/internal/httpserve"
 	"github.com/Reiers/curio-core/internal/parkcomplete"
+	"github.com/Reiers/curio-core/internal/stashgc"
 	"github.com/Reiers/curio-core/internal/stashintegrity"
 	"github.com/Reiers/curio-core/internal/payments"
 	"github.com/Reiers/curio-core/internal/pdpwire"
@@ -516,6 +517,24 @@ Flags:
 	// long-term storage, so a missing stash file = a latent proof fault.
 	stashIntegrity := stashintegrity.New(eng.DB(), stashDir)
 	extraTasks = append(extraTasks, stashIntegrity)
+
+	// StashGC (#90): reclaim orphaned stash files (unreferenced + older than
+	// retention) to prevent a self-inflicted disk-full outage. NEVER touches
+	// complete=1-backed files or referenced files. Defaults to DRY-RUN: it
+	// only logs what it WOULD delete until an operator arms it by setting
+	// CURIO_STASH_GC_ARM=1 (hard-won lesson: the 2026-06-16 manual cleanup
+	// deleted live data; arm deliberately after watching a dry-run).
+	gcArmed := os.Getenv("CURIO_STASH_GC_ARM") == "1"
+	stashGC := stashgc.New(eng.DB(), stashgc.Config{
+		StashDir: stashDir,
+		DryRun:   !gcArmed,
+	})
+	extraTasks = append(extraTasks, stashGC)
+	if gcArmed {
+		fmt.Printf("  stash-gc: ARMED (reclaiming orphan stash files >24h)\n")
+	} else {
+		fmt.Printf("  stash-gc: dry-run (set CURIO_STASH_GC_ARM=1 to arm deletion)\n")
+	}
 
 	// PaymentSettle: discovers + settles USDFC payment rails for the
 	// PDP-as-SP role. FilecoinWarmStorageService creates one rail per
