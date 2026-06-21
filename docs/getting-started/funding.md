@@ -28,13 +28,46 @@ else is per-tx gas.
 The PDP wallet address is shown in the dashboard topbar and in the `Wallets` page. Send
 testnet FIL to it from the calibration faucet, or mainnet FIL from your Filecoin wallet.
 
-## Sending USDFC
+## USDFC
 
-USDFC is the ERC-20 token clients pay storage rails in. You don't normally **send**
-USDFC out from the SP — instead, USDFC accumulates **into** the SP wallet as the
-`PDPv0_PaySettle` task claims accrued rail funds.
+USDFC is the ERC-20 stablecoin that storage rails are paid in. It shows up on the SP
+side in two ways:
 
-If you do need to move USDFC out (e.g. to consolidate balances or convert to FIL), use:
+1. **Accumulating in** — as the `PDPv0_PaySettle` task claims accrued rail funds, USDFC
+   lands in the SP wallet. This is the normal revenue path; you don't send it out.
+2. **A small lockup on dataset creation** — the Filecoin Warm Storage Service requires a
+   small USDFC deposit/lockup when a dataset is opened. On a self-driven mainnet bring-up
+   (you create your own first dataset to prove the loop), the wallet needs a couple of
+   USDFC up front, **before** `createDataSet`, or the tx reverts with
+   `InsufficientLockupFunds`.
+
+::: tip Check readiness before you spend gas
+`curio-core doctor` runs a USDFC preflight and prints `READY` / `NOT-READY` with the
+exact remediation, so you don't burn gas on a reverting `createDataSet`.
+:::
+
+### Self-funding USDFC (headless)
+
+There is **no native FIL→USDFC liquidity on Filecoin** worth relying on, so Curio Core
+can bridge USDC from an L1/L2 (Ethereum, Base, Arbitrum, Optimism, Polygon) into USDFC on
+Filecoin, signed by the SP's own key — no browser, no manual DEX clicking:
+
+```bash
+# quote only (default)
+curio-core wallet get-usdfc --amount 3 --from-chain base
+
+# execute the bridge
+curio-core wallet get-usdfc --amount 3 --from-chain base --submit
+```
+
+This needs USDC on the chosen source chain plus that chain's RPC in
+`CURIO_RPC_<CHAIN>` (e.g. `CURIO_RPC_BASE`), and a Squid integrator id in
+`CURIO_SQUID_INTEGRATOR_ID`. The SP's PDP wallet is used as both the source sender and
+the Filecoin receiver.
+
+### Moving USDFC out
+
+If you need to move USDFC out (e.g. to consolidate balances or convert to FIL):
 
 ```bash
 curio-core wallet send --asset usdfc <to-address> <amount>

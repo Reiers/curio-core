@@ -9,7 +9,8 @@
 *Pure Go. Embedded chain node. SQLite, not Yugabyte. No Lotus sidecar.*
 
 [![License: Apache 2.0 OR MIT](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](#license)
-[![Pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)](#status)
+[![Beta](https://img.shields.io/badge/status-beta-22BFC4.svg)](#status)
+[![Release](https://img.shields.io/badge/release-v0.1.0--beta.1-22BFC4)](https://github.com/Reiers/curio-core/releases/tag/v0.1.0-beta.1)
 [![Docs](https://img.shields.io/badge/docs-curio--core--docs.pages.dev-22BFC4)](https://curio-core-docs.pages.dev/)
 
 Website: **[curiocore.io](https://curiocore.io)** · Chain backend: **[golantern.io](https://golantern.io)**
@@ -20,23 +21,24 @@ Website: **[curiocore.io](https://curiocore.io)** · Chain backend: **[golantern
 
 ## TL;DR
 
-Curio Core is a Filecoin Onchain Cloud **hot-storage SP, in one static Go binary**. PDP task pipeline, payments, IPNI, operator+client WebUI, and an embedded Lantern chain node, all in a single ~90 MB process. **CGO_ENABLED=0**. No `filecoin-ffi`. No Rust toolchain. No Yugabyte cluster. No Lotus sidecar.
+Curio Core is a Filecoin Onchain Cloud **hot-storage SP, in one static Go binary**. PDP task pipeline, payments, IPNI, operator+client WebUI, and an embedded Lantern chain node, all in a single ~90 MB process. **CGO_ENABLED=0**. No `filecoin-ffi`. No Rust toolchain. No Yugabyte cluster. No Lotus sidecar. No external eth RPC.
 
-**Pre-alpha, proven on calibration today.** The full PDP proof loop is self-sustaining: deal accept → piece park → proof submit → USDFC settle, on a schedule, signed by the binary itself.
+**Beta, proven end-to-end on Filecoin mainnet.** The full hot-storage flow now runs on mainnet from a single machine (an old Mac mini, native arm64): SP registration → self-funded USDFC → payments → dataset creation → addPieces → live proving cycle. Every tx signed by the binary itself, zero Glif, no Lotus.
 
 | | |
 |---|---|
-| Dataset on calibration | **#13977** (FilOzone) |
-| Provider ID | **26** (self-registered) |
-| Successful prove cycles overnight 2026-05-25 | **8 / 8** |
-| USDFC settle txs confirmed on-chain | **5** |
-| First on-chain tx | calibration block **3,742,933** |
-| First prove tx | `0x8dae0bab…1a02d` (`tx_success=1`) |
+| Latest release | **[v0.1.0-beta.1](https://github.com/Reiers/curio-core/releases/tag/v0.1.0-beta.1)** |
+| Mainnet provider ID | **31** (self-registered, `oldlaptop.reiers.io`) |
+| First mainnet dataset | **#1311** (`createDataSet` status `0x1`) |
+| First mainnet addPieces | `0x6311d186…` status `0x1`, block **6,124,899** |
+| Mainnet proving cycle | **live** (dataset 1311, `prove_at_epoch` 6,127,755) |
+| SP host | one Mac mini, native arm64, CGO-free |
+| Calibration soak (overnight 2026-05-25) | **8 / 8** prove cycles, **5** USDFC settles |
 | Binary size (linux/amd64, no CGo) | **~90 MB** |
 | Process RSS at idle | **~55 MB** |
 | SQLite state.sqlite | **~2 MB** |
 
-> **Status:** pre-alpha. Mainnet readiness is a Q3 milestone. Live tracking: [Curio Core Status Overview](https://github.com/Reiers/curio-core/issues/10). Docs: <https://curio-core-docs.pages.dev/>.
+> **Status:** beta (`v0.1.0-beta.1`). First full mainnet PDP e2e is done; mainnet is now supported, with hardening (auth layer, operator runbook, soak) ongoing toward GA. Live tracking: [Curio Core Status Overview](https://github.com/Reiers/curio-core/issues/10). Docs: <https://curio-core-docs.pages.dev/>.
 
 ## What this is
 
@@ -166,7 +168,10 @@ client calls POST /pdp/data-sets/create-and-add
 
 | Capability | State |
 |---|---|
-| Embedded Lantern (calibration + mainnet) | ✅ shipped (v1.5.x) |
+| **Full mainnet PDP e2e** (register → fund → dataset → addPieces → prove) | ✅ **proven on mainnet** (v0.1.0-beta.1, dataset #1311) |
+| Headless USDFC self-funding (`wallet get-usdfc`, Squid + SushiSwap V3) | ✅ shipped ([#92](https://github.com/Reiers/curio-core/issues/92)) |
+| USDFC readiness preflight in `doctor` | ✅ shipped ([#91](https://github.com/Reiers/curio-core/issues/91)) |
+| Embedded Lantern (calibration + mainnet) | ✅ shipped (v1.7.21, zero-Glif read+write path) |
 | `/pdp/piece/uploads` streaming pipeline | ✅ live, end-to-end on cc-smoke |
 | SQLite-backed harmonytask scheduler | ✅ shipped (`harmonyquery.DBInterface` seam) |
 | Real on-chain tx via embedded Lantern | ✅ shipped (8 successful prove cycles overnight 2026-05-25) |
@@ -189,7 +194,9 @@ client calls POST /pdp/data-sets/create-and-add
 
 Full open roadmap: [issues by label](https://github.com/Reiers/curio-core/issues).
 
-## Try it (today)
+## Try it
+
+Grab a release binary/package from [Releases](https://github.com/Reiers/curio-core/releases) (deb/rpm/pkg/raw for linux amd64+arm64, macOS arm64), or build from source:
 
 ```sh
 # build
@@ -214,6 +221,10 @@ curio-core wallet import --role pdp <0xhex-private-key>
 curio-core wallet export --confirm <0xaddr>
 curio-core wallet role <0xaddr> backup
 curio-core wallet delete --yes <0xaddr>
+
+# Self-fund USDFC (bridge USDC from an L1/L2 -> USDFC on Filecoin, no browser)
+curio-core wallet get-usdfc --amount 3 --from-chain base          # quote only
+curio-core wallet get-usdfc --amount 3 --from-chain base --submit  # execute
 
 # Health + reconciliation report (read-only)
 curio-core doctor --network calibration
@@ -290,6 +301,13 @@ curl -X POST http://127.0.0.1:4711/admin/test-tx -d '{}'
 
 ## Roadmap
 
+**Phase 0 — Mainnet beta (done, 2026-06-21)**
+- ✅ First full PDP hot-storage e2e on Filecoin **mainnet**, from a single Mac mini
+- ✅ SP self-registration on mainnet (provider 31)
+- ✅ Self-funded USDFC: FIL → WFIL → USDFC via SushiSwap V3, signed by the binary ([#92](https://github.com/Reiers/curio-core/issues/92))
+- ✅ `createDataSet` → `addPieces` → live proving cycle on mainnet (dataset #1311)
+- ✅ Tagged [v0.1.0-beta.1](https://github.com/Reiers/curio-core/releases/tag/v0.1.0-beta.1)
+
 **Phase 1 — Foundations (done)**
 - ✅ Lantern V1 minimal node (~40 MB, pure Go, calibration + mainnet)
 - ✅ Pdpv0-only fork of upstream Curio
@@ -319,11 +337,13 @@ curl -X POST http://127.0.0.1:4711/admin/test-tx -d '{}'
 - ⏳ Aggregate root retrieval ([#49](https://github.com/Reiers/curio-core/issues/49))
 - ⏳ Client-side CLI shipped in same binary ([#52](https://github.com/Reiers/curio-core/issues/52))
 
-**Phase 4 — Mainnet readiness (Q3 2026)**
+**Phase 4 — GA hardening (Q3 2026)**
 - Mainnet bootstrap quorum for Lantern
 - Production auth layer for the dashboard (today: loopback only)
 - Operator runbook for the first paid client
 - Live `pdp_data_sets` row-state drift fix ([#65](https://github.com/Reiers/curio-core/issues/65))
+- Indexing-state observability for clients ([#93](https://github.com/Reiers/curio-core/issues/93))
+- Mainnet soak across multiple proving windows
 - TBD based on operator feedback.
 
 ## Differentiators

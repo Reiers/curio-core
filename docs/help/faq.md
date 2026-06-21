@@ -2,9 +2,14 @@
 
 ## Is this production-ready?
 
-**No.** Curio Core is pre-alpha. The proof loop works end-to-end on Filecoin
-Calibration, but mainnet readiness is the Q3 milestone. Don't run paid workloads on
-this yet.
+**Not for paid client workloads yet — but it's beta, and the full flow has run on
+mainnet.** Curio Core (`v0.1.0-beta.1`) completed the entire PDP hot-storage loop
+end-to-end on Filecoin **mainnet** from a single machine: SP registration → self-funded
+USDFC → payments → dataset creation → addPieces → live proving cycle (mainnet dataset
+#1311, provider 31). What's still in progress toward GA: a production auth layer for the
+dashboard (today loopback-only), an operator runbook, and a multi-window mainnet soak.
+Use calibration for learning, and treat mainnet as beta — understand the surface before
+you put a paying client on it.
 
 ## Why not just use upstream Curio?
 
@@ -56,15 +61,22 @@ go.mod bumps.
 
 ## Can I run on mainnet?
 
-Not yet. The proof loop is calibration-only today. Mainnet readiness is gated by:
+**Yes — it's been done end-to-end.** As of `v0.1.0-beta.1`, Curio Core ran the full PDP
+hot-storage flow on Filecoin mainnet from a single machine: SP registration → self-funded
+USDFC → payments → dataset creation (mainnet dataset #1311) → addPieces → live proving
+cycle, with the FEVM contract bindings (PDPVerifier, FilecoinPay, FWSS) exercised against
+the versions deployed on mainnet.
 
-- Audit of the FEVM contract bindings (PDPVerifier, FilecoinPay) against the v3.4.0
-  shipped on mainnet
-- Mainnet bootstrap quorum for Lantern
-- Operator runbook for the first production deployment
+What's still in progress before it's a fully hands-off production product:
 
-See [curio-core#10](https://github.com/Reiers/curio-core/issues/10) for the Q3
-checklist.
+- Production auth layer for the dashboard (today: loopback-only)
+- Operator runbook for the first paid client deployment
+- A multi-window mainnet soak
+- Mainnet bootstrap quorum hardening for Lantern
+
+So: mainnet works and is beta-supported. Run calibration first, and treat a mainnet
+deployment as beta until the GA items above land. See
+[curio-core#10](https://github.com/Reiers/curio-core/issues/10) for the checklist.
 
 ## What if my SP wallet runs out of FIL?
 

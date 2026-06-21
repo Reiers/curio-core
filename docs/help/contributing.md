@@ -17,8 +17,8 @@ Helpful issue content:
 
 ## Pull requests
 
-Pre-alpha. PRs are welcome but the surface is shifting fast. Before significant work,
-open a discussion issue first so we can confirm the direction.
+Beta. PRs are welcome but the surface is still shifting toward GA. Before significant
+work, open a discussion issue first so we can confirm the direction.
 
 For small fixes (typos, doc clarifications, low-risk patches), just open the PR.
 

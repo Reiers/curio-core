@@ -58,8 +58,12 @@ Curio Core's answer is **one binary**. Drop it on a single VM, point a domain at
 
 ## Status
 
-Pre-alpha. The proof loop ships on Filecoin Calibration today. Mainnet readiness is the
-Q3 milestone. See the [status & roadmap](/status) page and
+**Beta** (`v0.1.0-beta.1`). The full PDP hot-storage flow has run **end-to-end on
+Filecoin mainnet** from a single machine: SP registration → self-funded USDFC →
+payments → dataset creation → addPieces → live proving cycle (mainnet dataset #1311,
+provider 31). Every transaction is signed by the binary itself, with no Glif and no
+Lotus sidecar. Mainnet is now supported; GA hardening (dashboard auth, operator
+runbook, multi-window soak) is ongoing. See
 [curio-core#10](https://github.com/Reiers/curio-core/issues/10) for current health.
 
 ## Where to start

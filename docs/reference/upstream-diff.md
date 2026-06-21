@@ -50,7 +50,7 @@ Use upstream Curio if you need any of:
 - Multi-node cluster operation
 - Boost / MK20 deal markets
 - IPFS HTTP gateway
-- Production scale (today; pre-alpha is the limit on curio-core)
+- Large multi-node production scale (curio-core targets single-node hot storage)
 
 Curio Core is for the single-node hot-storage shape. Upstream Curio is the right
 choice for everything else.

@@ -3,9 +3,12 @@
 This walks you from zero to a running Curio Core SP on **Filecoin Calibration** in about
 5 minutes. Calibration is the testnet; nothing here costs real money.
 
-::: warning Mainnet
-Curio Core is pre-alpha. Do not run it against mainnet yet — wait for the Q3
-mainnet milestone in [curio-core#10](https://github.com/Reiers/curio-core/issues/10).
+::: tip Mainnet
+Curio Core is **beta** and has run the full PDP flow end-to-end on **mainnet**
+(see [curio-core#10](https://github.com/Reiers/curio-core/issues/10)). This quickstart
+uses calibration so you can get comfortable for free first; swap `--network calibration`
+for `--network mainnet` once you've done a calibration run and funded a mainnet wallet.
+Mainnet still costs real FIL (5 FIL Service Registry registration + gas) and real USDFC.
 :::
 
 ## 1. Install
@@ -47,14 +50,14 @@ sudo installer -pkg curio-core-arm64.pkg -target /
 ```
 
 Installs `/usr/local/bin/curio-core` + a launchd job (not started — run setup first).
-The `.pkg` is unsigned in pre-alpha; the installer's postinstall strips the
+The `.pkg` is unsigned in beta; the installer's postinstall strips the
 quarantine attribute so Gatekeeper allows it. Apple-silicon only for now.
 
 Verify:
 
 ```bash
 curio-core version
-# curio-core v0.1.0
+# curio-core v0.1.0-beta.1
 ```
 
 ## 2. Start the daemon

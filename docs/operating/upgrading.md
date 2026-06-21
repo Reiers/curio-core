@@ -1,6 +1,6 @@
 # Upgrading
 
-Curio Core is pre-alpha — expect frequent binary swaps as we ship.
+Curio Core is beta — expect frequent binary swaps as we ship toward GA.
 
 ## In-place upgrade
 
@@ -40,7 +40,7 @@ upstream does, because:
 1. Single-node deployments have a clear "snapshot-and-roll-forward" model: take a
    `state.sqlite` backup before upgrading, and if the new release misbehaves, restore
    from backup + revert to the previous binary.
-2. We're pre-alpha; the cost of supporting downgrade is high and the audience is
+2. We're pre-GA; the cost of supporting downgrade is high and the audience is
    small.
 
 So the rollback flow is:
