@@ -30,15 +30,19 @@
   {{else}}
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Hist#</th><th>Task</th><th>Name</th><th>Ended</th><th>Result</th><th>Error</th></tr></thead>
+      <thead><tr><th>Hist#</th><th>Task</th><th>Name</th><th>Executor</th><th>Posted</th><th>Ended</th><th>Queued</th><th>Took</th><th>Outcome</th><th>Message</th></tr></thead>
       <tbody>
         {{range $d.Recent}}
         <tr>
           <td class="mono">{{.ID}}</td>
           <td class="mono">{{.TaskID}}</td>
           <td class="mono">{{.Name}}</td>
+          <td class="mono text-xs muted">{{if .Executor}}{{.Executor}}{{else}}—{{end}}</td>
+          <td class="mono text-xs muted">{{.Posted}}</td>
           <td class="mono text-xs muted">{{.WorkEnd}}</td>
-          <td>{{if gt .Result 0}}<span class="pill pill-ok">ok</span>{{else}}<span class="pill pill-fail">fail</span>{{end}}</td>
+          <td class="mono text-xs">{{durMS .QueuedMS}}</td>
+          <td class="mono text-xs">{{durMS .TookMS}}</td>
+          <td>{{if gt .Result 0}}<span class="pill pill-ok">success</span>{{else}}<span class="pill pill-fail">fail</span>{{end}}</td>
           <td class="mono text-xs text-rose">{{.ErrShort}}</td>
         </tr>
         {{end}}

@@ -207,6 +207,18 @@ type overviewData struct {
 type overviewChain struct {
 	HeadEpoch int64
 	NetworkID string
+
+	// Chain Connectivity + Chain Node Network panels (Skiff-parity, but
+	// served entirely off the embedded Lantern = a live zero-Glif proof).
+	// All fields are best-effort; a nil/unavailable eth client leaves
+	// them at zero/empty and the panel renders graceful placeholders.
+	RPCAddress   string // embedded Lantern in-process RPC endpoint
+	Reachable    bool   // eth client answered BlockNumber within timeout
+	Synced       bool   // head epoch advanced / non-zero (live)
+	Version      string // curio-core build version (carries the chip)
+	ChainID      int64  // FEVM chain id (314 mainnet / 314159 calibration)
+	Peers        int64  // libp2p peer count from the embedded node
+	PendingTxCnt int64  // local mpool pending tx count
 }
 
 type overviewStats struct {
@@ -238,7 +250,9 @@ func (s *Server) collectOverview(ctx context.Context) overviewData {
 	out := overviewData{
 		NowUTC: time.Now().UTC().Format(time.RFC3339),
 		Chain: overviewChain{
-			NetworkID: s.cfg.Network,
+			NetworkID:  s.cfg.Network,
+			Version:    s.cfg.Version,
+			RPCAddress: "lantern (embedded, in-process)",
 		},
 	}
 	// Chain head: read from the embedded Lantern via eth_blockNumber
@@ -249,8 +263,24 @@ func (s *Server) collectOverview(ctx context.Context) overviewData {
 		ctxH, cancel := context.WithTimeout(ctx, 3*time.Second)
 		if n, err := s.eth.BlockNumber(ctxH); err == nil {
 			out.Chain.HeadEpoch = int64(n)
+			out.Chain.Reachable = true
+			out.Chain.Synced = n > 0
 		}
 		cancel()
+
+		// Chain Node Network panel: peer count, chain id, pending mpool.
+		// All best-effort off the embedded node; failures leave zeros.
+		ctxN, cancelN := context.WithTimeout(ctx, 3*time.Second)
+		if p, err := s.eth.PeerCount(ctxN); err == nil {
+			out.Chain.Peers = int64(p)
+		}
+		if id, err := s.eth.ChainID(ctxN); err == nil && id != nil {
+			out.Chain.ChainID = id.Int64()
+		}
+		if pc, err := s.eth.PendingTransactionCount(ctxN); err == nil {
+			out.Chain.PendingTxCnt = int64(pc)
+		}
+		cancelN()
 	}
 	if out.Chain.HeadEpoch == 0 {
 		var head sqlNullInt64
@@ -498,9 +528,15 @@ type taskHistRow struct {
 	ID       int64  `db:"id"`
 	TaskID   int64  `db:"task_id"`
 	Name     string `db:"name"`
+	Posted   string `db:"posted"`
 	WorkEnd  string `db:"work_end"`
 	Result   int64  `db:"result"`
 	ErrShort string `db:"err_short"`
+	Executor string `db:"executor"`
+	// Queued = work_start - posted (ms); Took = work_end - work_start (ms).
+	// Computed in SQLite via julianday so the template just prints them.
+	QueuedMS int64 `db:"queued_ms"`
+	TookMS   int64 `db:"took_ms"`
 }
 
 func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
@@ -509,7 +545,14 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, name, posted_time, owner_id FROM harmony_task
 		 ORDER BY id DESC LIMIT 50`)
 	_ = s.db.SelectI(r.Context(), &d.Recent,
-		`SELECT id, task_id, name, substr(work_end,1,19) AS work_end, result, substr(COALESCE(err,''),1,60) AS err_short
+		`SELECT id, task_id, name,
+		        substr(posted,1,19)   AS posted,
+		        substr(work_end,1,19) AS work_end,
+		        result,
+		        substr(COALESCE(err,''),1,80)                       AS err_short,
+		        COALESCE(completed_by_host_and_port,'')             AS executor,
+		        CAST((julianday(work_start)-julianday(posted))   *86400000 AS INTEGER) AS queued_ms,
+		        CAST((julianday(work_end)  -julianday(work_start))*86400000 AS INTEGER) AS took_ms
 		 FROM harmony_task_history
 		 ORDER BY id DESC LIMIT 50`)
 	s.render(w, "tasks", "Tasks", "tasks", d)
@@ -741,5 +784,17 @@ func funcMap() template.FuncMap {
 			return intPart.String() + "." + fracStr
 		},
 		"add": func(a, b int) int { return a + b },
+		"durMS": func(ms int64) string {
+			if ms < 0 {
+				return "—"
+			}
+			if ms < 1000 {
+				return fmt.Sprintf("%dms", ms)
+			}
+			if ms < 60000 {
+				return fmt.Sprintf("%.1fs", float64(ms)/1000)
+			}
+			return fmt.Sprintf("%dm %ds", ms/60000, (ms%60000)/1000)
+		},
 	}
 }

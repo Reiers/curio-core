@@ -26,6 +26,52 @@
 <section class="grid grid-2">
   <div class="card">
     <h2>
+      <svg style="color:#34d399" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12.55a11 11 0 0 1 14 0M2 8.82a16 16 0 0 1 20 0M8.5 16.4a6 6 0 0 1 7 0M12 20h.01"/></svg>
+      Chain connectivity
+    </h2>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>RPC source</th><th>Reachable</th><th>Sync</th><th>Network</th><th>Version</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono text-xs">{{$d.Chain.RPCAddress}}</td>
+            <td>{{if $d.Chain.Reachable}}<span class="pill pill-ok">ok</span>{{else}}<span class="pill pill-fail">down</span>{{end}}</td>
+            <td>{{if $d.Chain.Synced}}<span class="pill pill-ok">ok</span>{{else}}<span class="pill pill-mute">—</span>{{end}}</td>
+            <td class="mono text-xs">{{$d.Chain.NetworkID}}{{if $d.Chain.ChainID}} <span class="muted">(chainid {{$d.Chain.ChainID}})</span>{{end}}</td>
+            <td class="mono text-xs muted">{{$d.Chain.Version}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="snapshot-line" style="margin-top:.5rem">Served by the embedded Lantern node — no external RPC (zero-Glif).</div>
+  </div>
+
+  <div class="card">
+    <h2>
+      <svg style="color:#a78bfa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12a3 3 0 1 0 6 0 3 3 0 0 0-6 0zM3 12h4m10 0h4M12 3v4m0 10v4"/></svg>
+      Chain node network
+    </h2>
+    <div class="row">
+      <div>
+        <div class="stat-num text-brand glow">{{$d.Chain.HeadEpoch}}</div>
+        <div class="stat-label">epoch</div>
+      </div>
+      <div>
+        <div class="stat-num">{{$d.Chain.Peers}}</div>
+        <div class="stat-label">peers</div>
+      </div>
+      <div>
+        <div class="stat-num">{{$d.Chain.PendingTxCnt}}</div>
+        <div class="stat-label">pending tx</div>
+      </div>
+    </div>
+    <div class="snapshot-line" style="margin-top:.5rem">Embedded libp2p node · {{$d.Chain.NetworkID}}</div>
+  </div>
+</section>
+
+<section class="grid grid-2">
+  <div class="card">
+    <h2>
       <svg style="color:#34d399" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
       Proof loop, last 24h
     </h2>
