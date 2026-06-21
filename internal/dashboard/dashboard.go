@@ -208,8 +208,8 @@ type overviewChain struct {
 	HeadEpoch int64
 	NetworkID string
 
-	// Chain Connectivity + Chain Node Network panels (Skiff-parity, but
-	// served entirely off the embedded Lantern = a live zero-Glif proof).
+	// Chain Connectivity + Chain Node Network panels, served entirely off
+	// the embedded Lantern = a live zero-Glif proof.
 	// All fields are best-effort; a nil/unavailable eth client leaves
 	// them at zero/empty and the panel renders graceful placeholders.
 	RPCAddress   string // embedded Lantern in-process RPC endpoint

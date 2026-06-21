@@ -548,11 +548,10 @@ func (r *TaskRegistry) Len() int { return len(r.byName) }
 // carve-out fixes that). The static descriptors use `tasknames.PDPv0_*`
 // for naming consistency.
 //
-// Scope (2026-05-23, Andy via Nicklas): pdpv0-only. `tasks/pdp` (v1, the
-// mk20-deal-flow PDP) is intentionally NOT registered here. The v1
-// package + its `curio/market/mk20` transitive are out of scope for
-// curio-core. If v1 is reintroduced later, restore the safeCtors block
-// from git history at commit fd85e79.
+// Scope: pdpv0-only. `tasks/pdp` (v1, the mk20-deal-flow PDP) is
+// intentionally NOT registered here. The v1 package + its
+// `curio/market/mk20` transitive are out of scope for curio-core. If v1
+// is reintroduced later, restore the safeCtors block from git history.
 func BuildTaskRegistry() (*TaskRegistry, error) {
 	r := &TaskRegistry{byName: make(map[string]harmonytask.TaskTypeDetails, 32)}
 

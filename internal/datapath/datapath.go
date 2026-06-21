@@ -4,17 +4,15 @@
 // mounted disk and curio-core will find and use it — no flags, no
 // config file, no DB host.
 //
-// This is the "it just works" onboarding touch: parity with (and a
-// superset of) the labelled-folder discovery described for Curio's
-// Skiff build, except here it is actually implemented and tested,
-// CGO-free, and works on linux + darwin.
+// This is the "it just works" onboarding touch: labelled-folder
+// discovery, CGO-free, working on linux + darwin.
 //
 // Resolution precedence (first hit wins):
 //
 //  1. explicit path        — the --data-storage flag / Resolve(explicit=...)
 //  2. env CURIO_PDP_DATA   — primary env override
-//  3. env DATA_STORAGE     — Skiff-compatible alias
-//  4. env CURIO_DATA       — Skiff-compatible alias
+//  3. env DATA_STORAGE     — compatibility alias
+//  4. env CURIO_DATA       — compatibility alias
 //  5. labelled folder      — a directory named LabelDir ("curio-pdp-data")
 //     found within MaxDepth levels of any real mountpoint, preferring
 //     the mount with the most free space (so big data disks win over /)

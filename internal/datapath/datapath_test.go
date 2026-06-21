@@ -29,7 +29,7 @@ func TestResolve_EnvPrecedence(t *testing.T) {
 		t.Fatalf("CURIO_PDP_DATA should win: got %+v", got)
 	}
 
-	// With CURIO_PDP_DATA unset, DATA_STORAGE (Skiff alias) wins next.
+	// With CURIO_PDP_DATA unset, DATA_STORAGE (compatibility alias) wins next.
 	t.Setenv("CURIO_PDP_DATA", "")
 	if got := Resolve("", "/fb"); got.Path != "/b" || got.Source != "env:DATA_STORAGE" {
 		t.Fatalf("DATA_STORAGE should win: got %+v", got)

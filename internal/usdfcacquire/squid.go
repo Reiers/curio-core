@@ -8,8 +8,8 @@
 // quotes a Squid route (source-chain USDC -> Filecoin USDFC), signs the
 // returned source-chain transaction with the operator's own EVM key, and
 // broadcasts + tracks it to completion. The result lands USDFC directly in
-// the SP's PDP wallet on Filecoin -- fully headless, the thing Skiff/Easy-PDP
-// cannot do.
+// the SP's PDP wallet on Filecoin -- fully headless, no browser wallet
+// required.
 //
 // Squid contract: POST /v2/route returns a transactionRequest{target,data,
 // value,gasLimit}; GET /v2/status tracks the cross-chain fill. Both require
