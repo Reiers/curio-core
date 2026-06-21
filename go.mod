@@ -305,7 +305,7 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/filecoin-project/curio => github.com/Reiers/curio v1.27.3-0.20260617132910-4f4096d6460a
+replace github.com/filecoin-project/curio => github.com/Reiers/curio v1.27.3-0.20260621150614-c5f7abfc8436
 
 replace github.com/curiostorage/harmonyquery => github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13
 

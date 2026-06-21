@@ -93,7 +93,8 @@ func cmdDemoAddPieces(args []string) error {
 	fs.Var(&metaFlags, "metadata", "metadata entry key=value (repeatable, applied to all pieces uniformly)")
 	dataDir := fs.String("data-dir", defaultDataDir(), "curio-core data directory")
 	network := fs.String("network", "calibration", "network (calibration|mainnet)")
-	daemon := fs.String("daemon", "http://127.0.0.1:4711", "daemon base URL")
+	daemon := fs.String("daemon", "http://127.0.0.1:4711", "daemon base URL (PDP /pdp endpoints)")
+	rpc := fs.String("rpc", "", "node JSON-RPC base URL for on-chain reads (default: --daemon; use the RPC port in split-port mode)")
 	dryRun := fs.Bool("dry-run", false, "print payload without POSTing")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -157,7 +158,11 @@ func cmdDemoAddPieces(args []string) error {
 	}
 	chainID := int(chainIDU64)
 
-	clientDataSetID, err := lookupClientDataSetID(ctx, *daemon, fwss, *dataSetID)
+	rpcBase := *rpc
+	if rpcBase == "" {
+		rpcBase = *daemon
+	}
+	clientDataSetID, err := lookupClientDataSetID(ctx, rpcBase, *network, *dataSetID)
 	if err != nil {
 		return fmt.Errorf("look up clientDataSetId for dataset %d: %w", *dataSetID, err)
 	}
@@ -431,11 +436,22 @@ func buildAddPiecesTypedData(
 //
 // We hit upstream glif directly for this read-only call; daemon
 // proxying not needed.
-func lookupClientDataSetID(ctx context.Context, daemon string, fwssIgnored common.Address, dataSetID uint64) (*big.Int, error) {
-	const calibrationRPC = "https://api.calibration.node.glif.io/rpc/v1"
-	// FilecoinWarmStorageServiceStateView on calibration:
-	// 0x537320bd004a7FDd3c1932ca64BD88268301322A
-	stateView := common.HexToAddress("0x537320bd004a7FDd3c1932ca64BD88268301322A")
+func lookupClientDataSetID(ctx context.Context, rpcBase string, network string, dataSetID uint64) (*big.Int, error) {
+	// Query a node RPC on the SAME network as the dataset. The previous
+	// hardcoded calibration RPC + calibration StateView returned a wrong
+	// clientDataSetId on mainnet, which made the AddPieces EIP-712 signature
+	// recover to the wrong address (FWSS InvalidSignature revert).
+	rpcURL := strings.TrimRight(rpcBase, "/") + "/rpc/v1"
+	// FilecoinWarmStorageServiceStateView, per network.
+	var stateView common.Address
+	switch network {
+	case "mainnet":
+		stateView = common.HexToAddress("0xad28bbf18a72f728ed816d07f5a1d7ec40d68b5e")
+	case "calibration":
+		stateView = common.HexToAddress("0x537320bd004a7FDd3c1932ca64BD88268301322A")
+	default:
+		return nil, fmt.Errorf("lookupClientDataSetID: unknown network %q", network)
+	}
 	selector := crypto.Keccak256([]byte("getDataSet(uint256)"))[:4]
 	arg := common.BigToHash(new(big.Int).SetUint64(dataSetID))
 	data := append([]byte{}, selector...)
@@ -453,7 +469,7 @@ func lookupClientDataSetID(ctx context.Context, daemon string, fwssIgnored commo
 		},
 	}
 	bj, _ := json.Marshal(body)
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Post(calibrationRPC, "application/json", bytes.NewReader(bj))
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Post(rpcURL, "application/json", bytes.NewReader(bj))
 	if err != nil {
 		return nil, fmt.Errorf("eth_call: %w", err)
 	}
