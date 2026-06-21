@@ -86,7 +86,14 @@ func cmdDoctor(args []string) error {
 		fmt.Printf("  WARN: %v\n", err)
 	}
 
-	// --- 5. PDP datasets summary ---
+	// --- 5. Payments readiness (USDFC prerequisite) ---
+	fmt.Println()
+	fmt.Println(divider("Payments readiness (USDFC)"))
+	if err := reportPaymentsReadiness(ctx, db, eth, *network); err != nil {
+		fmt.Printf("  WARN: %v\n", err)
+	}
+
+	// --- 6. PDP datasets summary ---
 	fmt.Println()
 	fmt.Println(divider("PDP datasets"))
 	if err := reportPDPDatasets(ctx, db); err != nil {
@@ -178,6 +185,61 @@ func reportWalletBalances(ctx context.Context, db *harmonysqlite.DB, eth *cethcl
 
 		fmt.Printf("  %-44s  %-8s  %-22s  %s\n", wlt.Address, wlt.Role, filStr, usdfcStr)
 	}
+	return nil
+}
+
+// reportPaymentsReadiness checks the PDP wallet's USDFC balance and tells
+// the operator, in plain language, whether the SP can create paid datasets.
+//
+// Datasets are paid in USDFC, not FIL. A wallet with FIL but 0 USDFC will
+// sail through SP registration and then have CreateDataSet REVERT on-chain
+// with FWSS InsufficientLockupFunds. This preflight surfaces that BEFORE
+// the user wastes gas on a doomed tx. (curio-core#91)
+func reportPaymentsReadiness(ctx context.Context, db *harmonysqlite.DB, eth *cethclient.Client, network string) error {
+	wallets, err := wallet.List(ctx, db)
+	if err != nil {
+		return err
+	}
+	var pdpAddr string
+	for _, w := range wallets {
+		if w.Role == "pdp" {
+			pdpAddr = w.Address
+			break
+		}
+	}
+	if pdpAddr == "" {
+		fmt.Println("  no role=pdp wallet found — run setup first.")
+		return nil
+	}
+	usdfcAddr, hasUSDFC := usdfcAddressFor(network)
+	if !hasUSDFC {
+		fmt.Printf("  USDFC address unknown for network %q — skipping.\n", network)
+		return nil
+	}
+	addr := common.HexToAddress(pdpAddr)
+	balanceOf := append([]byte{0x70, 0xa0, 0x82, 0x31}, common.LeftPadBytes(addr.Bytes(), 32)...)
+	out, err := eth.CallContract(ctx, ethCallMsg(usdfcAddr, balanceOf), nil)
+	if err != nil {
+		return fmt.Errorf("read USDFC balance: %w", err)
+	}
+	bal := new(big.Int).SetBytes(out)
+
+	fmt.Printf("  pdp wallet:                    %s\n", pdpAddr)
+	fmt.Printf("  USDFC balance:                 %s\n", formatBigWei(bal))
+	if bal.Sign() > 0 {
+		fmt.Println("  status:                        ✓ has USDFC.")
+		fmt.Println("  next:                          ensure operator approval is set:")
+		fmt.Println("                                 curio-core demo prepare-client-payments --submit")
+		return nil
+	}
+	// 0 USDFC: the blocking case. Be loud and actionable.
+	fmt.Println("  status:                        ✗ NOT READY — 0 USDFC.")
+	fmt.Println("  why:                           Datasets are paid in USDFC, not FIL. With 0 USDFC,")
+	fmt.Println("                                 CreateDataSet will REVERT (FWSS InsufficientLockupFunds).")
+	fmt.Println("  fix:                           Acquire USDFC for this wallet, then run")
+	fmt.Println("                                 'curio-core demo prepare-client-payments --submit'.")
+	fmt.Println("                                 USDFC is minted via a Secured Finance trove (min 200 USDFC")
+	fmt.Println("                                 debt, >=110% FIL collateral) or received as a transfer.")
 	return nil
 }
 
