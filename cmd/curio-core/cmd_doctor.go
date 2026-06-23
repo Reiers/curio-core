@@ -26,6 +26,9 @@ import (
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 
+	"github.com/filecoin-project/curio/lib/filecoinpayment"
+	curiocontract "github.com/filecoin-project/curio/pdp/contract"
+
 	lanternbuild "github.com/Reiers/lantern/build"
 
 	cethclient "github.com/Reiers/curio-core/internal/ethclient"
@@ -236,21 +239,74 @@ func reportPaymentsReadiness(ctx context.Context, db *harmonysqlite.DB, eth *cet
 
 	fmt.Printf("  pdp wallet:                    %s\n", pdpAddr)
 	fmt.Printf("  USDFC balance:                 %s\n", formatBigWei(bal))
-	if bal.Sign() > 0 {
-		fmt.Println("  status:                        ✓ has USDFC.")
-		fmt.Println("  next:                          ensure operator approval is set:")
-		fmt.Println("                                 curio-core demo prepare-client-payments --submit")
-		return nil
+
+	// Read FilecoinPay operator approval for FWSS. Even with USDFC present,
+	// CreateDataSet/AddPieces revert unless the payer has approved FWSS as an
+	// operator on FilecoinPay (the 3rd of the prepare-client-payments txes).
+	// operatorApprovals(token, client, operator) returns a flattened struct;
+	// the first 32-byte word is bool isApproved. (curio-core#91)
+	nw := curiocontract.Network(network)
+	approved, approvalErr := readOperatorApproval(ctx, eth, nw, usdfcAddr, addr)
+
+	switch {
+	case bal.Sign() == 0:
+		// 0 USDFC: the blocking case. Be loud and actionable.
+		fmt.Println("  operator approval (FWSS):      —")
+		fmt.Println("  status:                        ✗ NOT READY — 0 USDFC.")
+		fmt.Println("  why:                           Datasets are paid in USDFC, not FIL. With 0 USDFC,")
+		fmt.Println("                                 CreateDataSet will REVERT (FWSS InsufficientLockupFunds).")
+		fmt.Println("  fix:                           Acquire USDFC for this wallet, then run")
+		fmt.Println("                                 'curio-core demo prepare-client-payments --submit'.")
+		fmt.Println("                                 USDFC is minted via a Secured Finance trove (min 200 USDFC")
+		fmt.Println("                                 debt, >=110% FIL collateral) or received as a transfer.")
+	case approvalErr != nil:
+		fmt.Printf("  operator approval (FWSS):      ERR (%v)\n", approvalErr)
+		fmt.Println("  status:                        ? has USDFC, could not read operator approval.")
+		fmt.Println("  next:                          retry, or ensure approval is set:")
+		fmt.Println("                                 curio-core demo prepare-client-payments --submit --skip-approve --skip-deposit")
+	case !approved:
+		fmt.Println("  operator approval (FWSS):      ✗ not approved")
+		fmt.Println("  status:                        ✗ NOT READY — USDFC present but FWSS is not an approved operator.")
+		fmt.Println("  why:                           FWSS pulls USDFC from FilecoinPay on your behalf; without")
+		fmt.Println("                                 operator approval, CreateDataSet/AddPieces revert.")
+		fmt.Println("  fix:                           curio-core demo prepare-client-payments --submit --skip-approve --skip-deposit")
+	default:
+		fmt.Println("  operator approval (FWSS):      ✓ approved")
+		fmt.Println("  status:                        ✓ PAYMENTS READY — USDFC funded + FWSS operator approved.")
 	}
-	// 0 USDFC: the blocking case. Be loud and actionable.
-	fmt.Println("  status:                        ✗ NOT READY — 0 USDFC.")
-	fmt.Println("  why:                           Datasets are paid in USDFC, not FIL. With 0 USDFC,")
-	fmt.Println("                                 CreateDataSet will REVERT (FWSS InsufficientLockupFunds).")
-	fmt.Println("  fix:                           Acquire USDFC for this wallet, then run")
-	fmt.Println("                                 'curio-core demo prepare-client-payments --submit'.")
-	fmt.Println("                                 USDFC is minted via a Secured Finance trove (min 200 USDFC")
-	fmt.Println("                                 debt, >=110% FIL collateral) or received as a transfer.")
 	return nil
+}
+
+// selOperatorApprovals is the 4-byte selector for FilecoinPay's auto-generated
+// public-mapping getter operatorApprovals(address token, address client,
+// address operator). The returned tuple flattens the OperatorApproval struct;
+// the first word is bool isApproved.
+var selOperatorApprovals = ethCryptoKeccak256([]byte("operatorApprovals(address,address,address)"))[:4]
+
+// readOperatorApproval returns whether `client` has approved FWSS as an operator
+// for `token` on the network's FilecoinPay contract. Read-only eth_call.
+func readOperatorApproval(ctx context.Context, eth *cethclient.Client, nw curiocontract.Network, token, client common.Address) (bool, error) {
+	pay, err := filecoinpayment.PaymentContractAddressFor(nw)
+	if err != nil {
+		return false, fmt.Errorf("FilecoinPay address: %w", err)
+	}
+	fwss := curiocontract.ContractAddressesFor(nw).AllowedPublicRecordKeepers.FWSService
+
+	data := make([]byte, 0, 4+96)
+	data = append(data, selOperatorApprovals...)
+	data = append(data, common.LeftPadBytes(token.Bytes(), 32)...)
+	data = append(data, common.LeftPadBytes(client.Bytes(), 32)...)
+	data = append(data, common.LeftPadBytes(fwss.Bytes(), 32)...)
+
+	out, err := eth.CallContract(ctx, ethCallMsg(pay, data), nil)
+	if err != nil {
+		return false, err
+	}
+	if len(out) < 32 {
+		return false, fmt.Errorf("short operatorApprovals return: %d bytes", len(out))
+	}
+	// First 32-byte word: bool isApproved (non-zero = true).
+	return new(big.Int).SetBytes(out[:32]).Sign() != 0, nil
 }
 
 func reportRecentMessages(ctx context.Context, db *harmonysqlite.DB) error {
