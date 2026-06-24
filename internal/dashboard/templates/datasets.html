@@ -22,7 +22,7 @@
           <th>ID</th>
           <th>Status</th>
           <th>Next prove</th>
-          <th>Last prove</th>
+          <th>Last proven (on-chain)</th>
           <th>Failures</th>
           <th>Init</th>
         </tr>
@@ -32,16 +32,16 @@
         <tr>
           <td class="mono">{{.ID}}</td>
           <td>
-            {{if and .TerminatedAtEpoch.Valid (gt .TerminatedAtEpoch.Int64 0)}}
-              <span class="pill pill-fail">terminated @ {{.TerminatedAtEpoch.Int64}}</span>
-            {{else if gt .ConsecutiveProveFailure 0}}
-              <span class="pill pill-warn">{{.ConsecutiveProveFailure}} consecutive fail</span>
-            {{else}}
-              <span class="pill pill-ok">healthy</span>
-            {{end}}
+            {{if eq .ProveStatus "terminated"}}<span class="pill pill-fail">terminated</span>
+            {{else if eq .ProveStatus "wedged"}}<span class="pill pill-fail">wedged ({{.ConsecutiveProveFailure}} fail)</span>
+            {{else if eq .ProveStatus "overdue"}}<span class="pill pill-warn">prove overdue</span>
+            {{else if eq .ProveStatus "never-proven"}}<span class="pill pill-warn">never proven</span>
+            {{else if eq .ProveStatus "awaiting-window"}}<span class="pill pill-info">awaiting window</span>
+            {{else if eq .ProveStatus "proven"}}<span class="pill pill-ok">proven</span>
+            {{else}}<span class="pill pill-mute">unknown</span>{{end}}
           </td>
           <td class="mono">{{if .ProveAtEpoch.Valid}}{{.ProveAtEpoch.Int64}}{{else}}—{{end}}</td>
-          <td class="mono">{{if .PrevChallengeReqEpoch.Valid}}{{.PrevChallengeReqEpoch.Int64}}{{else}}—{{end}}</td>
+          <td class="mono">{{if .HaveOnChain}}{{if gt .LastProvenEpoch 0}}{{.LastProvenEpoch}}{{else}}never{{end}}{{else}}—{{end}}</td>
           <td>{{.ConsecutiveProveFailure}}</td>
           <td>{{yesno .InitReady}}</td>
         </tr>

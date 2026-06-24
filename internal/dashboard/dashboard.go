@@ -443,6 +443,14 @@ type datasetRow struct {
 	ConsecutiveProveFailure int64        `db:"consecutive_prove_failures"`
 	TerminatedAtEpoch       sqlNullInt64 `db:"terminated_at_epoch"`
 	InitReady               int64        `db:"init_ready"`
+
+	// On-chain truth (populated per request when the eth client is wired).
+	// LastProvenEpoch is getDataSetLastProvenEpoch: the epoch a proof actually
+	// LANDED on-chain (0/unset = never proven). ProveStatus is the honest derived
+	// state shown in the UI — a successful CHALLENGE REQUEST is not a PROOF.
+	LastProvenEpoch int64
+	HaveOnChain     bool
+	ProveStatus     string // "proven" | "never-proven" | "overdue" | "wedged" | "terminated"
 }
 
 func (s *Server) handleDatasets(w http.ResponseWriter, r *http.Request) {
@@ -451,7 +459,70 @@ func (s *Server) handleDatasets(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, prove_at_epoch, prev_challenge_request_epoch,
 			consecutive_prove_failures, terminated_at_epoch, init_ready
 		FROM pdp_data_sets ORDER BY id DESC LIMIT 200`)
+
+	// Enrich with on-chain proven-epoch + derive an HONEST status. Without this,
+	// the UI showed "healthy" for a dataset that had never actually proven on-chain
+	// (consecutive_prove_failures=0 only means "no failure recorded", not "proven").
+	var head int64
+	var pdpv *contract.PDPVerifier
+	if s.eth != nil {
+		ctxH, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		if n, err := s.eth.BlockNumber(ctxH); err == nil {
+			head = int64(n)
+		}
+		if pv, err := contract.NewPDPVerifier(contract.ContractAddresses().PDPVerifier, s.eth); err == nil {
+			pdpv = pv
+		}
+		cancel()
+	}
+	for i := range d.Datasets {
+		row := &d.Datasets[i]
+		if pdpv != nil {
+			ctxR, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			if lp, err := pdpv.GetDataSetLastProvenEpoch(contract.EthCallOpts(ctxR), big.NewInt(row.ID)); err == nil {
+				row.LastProvenEpoch = lp.Int64()
+				row.HaveOnChain = true
+			}
+			cancel()
+		}
+		row.ProveStatus = deriveProveStatus(row, head)
+	}
 	s.render(w, "datasets", "Datasets", "datasets", d)
+}
+
+// deriveProveStatus computes the honest proving status from on-chain truth +
+// DB schedule state. The key honesty: "proven" requires an actual on-chain proof
+// (LastProvenEpoch advanced past the create baseline), NOT merely a challenge
+// request or a zero failure count.
+func deriveProveStatus(row *datasetRow, head int64) string {
+	if row.TerminatedAtEpoch.Valid && row.TerminatedAtEpoch.Int64 > 0 {
+		return "terminated"
+	}
+	if row.ConsecutiveProveFailure > 0 {
+		return "wedged"
+	}
+	if !row.HaveOnChain {
+		return "unknown" // eth client unwired; don't claim proven
+	}
+	// A dataset that has never landed a proof reports LastProvenEpoch at its
+	// create-time baseline. We can't perfectly know the baseline here, but the
+	// honest signal is: if the next scheduled prove window is already in the past
+	// and we haven't advanced, it's overdue; if a proof has clearly landed
+	// recently relative to the schedule, it's proven.
+	if row.ProveAtEpoch.Valid && head > 0 && row.ProveAtEpoch.Int64 > 0 {
+		// window opens at prove_at_epoch; if head is well past it and lastProven
+		// is still below it, the proof for this period hasn't landed.
+		if head > row.ProveAtEpoch.Int64 && row.LastProvenEpoch < row.ProveAtEpoch.Int64 {
+			return "overdue"
+		}
+		// proof landed at/after the scheduled window
+		if row.LastProvenEpoch >= row.ProveAtEpoch.Int64 {
+			return "proven"
+		}
+		// window still in the future, not yet due
+		return "awaiting-window"
+	}
+	return "never-proven"
 }
 
 type railsData struct {

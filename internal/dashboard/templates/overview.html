@@ -73,17 +73,18 @@
   <div class="card">
     <h2>
       <svg style="color:#34d399" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
-      Proof loop, last 24h
+      Prove tasks, last 24h
     </h2>
     <div class="row">
       <div>
         <div class="stat-num text-emerald">{{$d.Stats.RecentProveSuccess24}}</div>
-        <div class="stat-label">succeeded</div>
+        <div class="stat-label">task ran</div>
       </div>
       <div>
         <div class="stat-num text-rose">{{$d.Stats.RecentProveFailed24}}</div>
-        <div class="stat-label">failed</div>
+        <div class="stat-label">task failed</div>
       </div>
+      <div class="stat-sub" style="flex-basis:100%;margin-top:.25rem">Task ran = proof generated &amp; broadcast. On-chain landing is per-dataset on the Datasets page (Last proven).</div>
       <div class="ml-auto">
         <a href="/tasks" class="btn btn-ghost btn-xs">View tasks →</a>
       </div>
