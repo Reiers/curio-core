@@ -28,6 +28,14 @@ type Poller struct {
 
 	cursorMu sync.Mutex
 	cursor   int64 // last seen harmony_task_history.id; rows with id > cursor are new
+
+	// ethCursor tracks the last seen message_waits_eth.rowid. On-chain reverts
+	// (tx_status='confirmed' AND tx_success=0) are the silent-failure class the
+	// task-history poller MISSES: the sending task reports result=1 (it correctly
+	// broadcast a tx) while the tx itself reverts on-chain. Without this watch the
+	// dashboard shows green for a reverted proof/scheduling tx.
+	ethCursorMu sync.Mutex
+	ethCursor   int64
 }
 
 // NewPoller constructs a Poller. Default interval is 30s.
@@ -47,6 +55,9 @@ func (p *Poller) Run(ctx context.Context) error {
 	if err := p.initCursor(ctx); err != nil {
 		return err
 	}
+	if err := p.initEthCursor(ctx); err != nil {
+		return err
+	}
 	t := time.NewTicker(p.interval)
 	defer t.Stop()
 	for {
@@ -57,8 +68,119 @@ func (p *Poller) Run(ctx context.Context) error {
 			if err := p.tick(ctx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warnw("alerts.Poller.tick failed", "err", err)
 			}
+			if err := p.tickEthReverts(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warnw("alerts.Poller.tickEthReverts failed", "err", err)
+			}
 		}
 	}
+}
+
+func (p *Poller) initEthCursor(ctx context.Context) error {
+	var maxID *int64
+	if err := p.db.QueryRowI(ctx, `SELECT MAX(rowid) FROM message_waits_eth`).Scan(&maxID); err != nil {
+		return err
+	}
+	p.ethCursorMu.Lock()
+	defer p.ethCursorMu.Unlock()
+	if maxID != nil {
+		p.ethCursor = *maxID
+	}
+	log.Infow("alerts.Poller eth-revert watch initialized", "starting_eth_cursor", p.ethCursor)
+	return nil
+}
+
+type ethRevertRow struct {
+	RowID       int64  `db:"rowid"`
+	TxHash      string `db:"signed_tx_hash"`
+	BlockNumber int64  `db:"confirmed_block_number"`
+	Reason      string `db:"send_reason"`
+	FromAddr    string `db:"from_address"`
+	Nonce       int64  `db:"nonce"`
+}
+
+// tickEthReverts scans message_waits_eth for newly-confirmed-but-reverted txs
+// and emits an error/critical alert for each. This is the on-chain failure path
+// the task-history poller cannot see (task result=1, tx_success=0).
+func (p *Poller) tickEthReverts(ctx context.Context) error {
+	p.ethCursorMu.Lock()
+	cursor := p.ethCursor
+	p.ethCursorMu.Unlock()
+
+	var rows []ethRevertRow
+	err := p.db.SelectI(ctx, &rows, `
+		SELECT w.rowid AS rowid,
+		       w.signed_tx_hash AS signed_tx_hash,
+		       COALESCE(w.confirmed_block_number, 0) AS confirmed_block_number,
+		       COALESCE(s.send_reason, '') AS send_reason,
+		       COALESCE(s.from_address, '') AS from_address,
+		       COALESCE(s.nonce, 0) AS nonce
+		FROM message_waits_eth w
+		LEFT JOIN message_sends_eth s ON lower(s.signed_hash) = lower(w.signed_tx_hash)
+		WHERE w.rowid > $1
+		  AND w.tx_status = 'confirmed'
+		  AND w.tx_success = 0
+		ORDER BY w.rowid ASC
+		LIMIT 100
+	`, cursor)
+	if err != nil {
+		return err
+	}
+
+	var newCursor *int64
+	if err := p.db.QueryRowI(ctx, `SELECT MAX(rowid) FROM message_waits_eth WHERE rowid > $1`, cursor).Scan(&newCursor); err != nil {
+		return err
+	}
+
+	for _, row := range rows {
+		reason := row.Reason
+		if reason == "" {
+			reason = "unknown"
+		}
+		// On-chain reverts on the proving path are high-impact: a reverted
+		// prove/proving-period tx means the dataset is not being proven. Treat
+		// proving-related reasons as critical, others as error.
+		sev := SeverityError
+		if strings.Contains(reason, "prov") || strings.Contains(reason, "prove") {
+			sev = SeverityCritical
+		}
+
+		source := "eth-tx/" + reason
+		fp := Fingerprint(source, map[string]any{
+			"tx_hash": strings.ToLower(row.TxHash),
+		})
+
+		_, emitErr := Emit(ctx, p.db, EmitArgs{
+			Severity:    sev,
+			Source:      source,
+			Fingerprint: fp,
+			Message:     "on-chain tx REVERTED: " + reason + " (" + shortHash(row.TxHash) + ")",
+			Context: map[string]any{
+				"tx_hash":      row.TxHash,
+				"send_reason":  reason,
+				"from_address": row.FromAddr,
+				"nonce":        row.Nonce,
+				"block_number": row.BlockNumber,
+				"tx_success":   0,
+			},
+		})
+		if emitErr != nil {
+			log.Warnw("alerts.Poller: eth-revert Emit failed", "tx_hash", row.TxHash, "err", emitErr)
+		}
+	}
+
+	if newCursor != nil {
+		p.ethCursorMu.Lock()
+		p.ethCursor = *newCursor
+		p.ethCursorMu.Unlock()
+	}
+	return nil
+}
+
+func shortHash(h string) string {
+	if len(h) <= 12 {
+		return h
+	}
+	return h[:8] + "\u2026" + h[len(h)-4:]
 }
 
 func (p *Poller) initCursor(ctx context.Context) error {

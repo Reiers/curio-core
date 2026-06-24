@@ -1,0 +1,71 @@
+{{define "messages"}}{{template "_head" .}}{{template "_open_body" .}}
+{{$d := .Data}}
+
+{{if gt $d.Reverted 0}}
+<section class="card" style="border-color:#7f1d1d;background:rgba(127,29,29,0.12)">
+  <h2 class="text-rose">⚠ {{$d.Reverted}} on-chain REVERT(s) in history</h2>
+  <p class="muted text-sm">A reverted tx means the operation did <strong>not</strong> take effect on-chain even though the local task may have reported success. Reverted proving txs raise a critical alert. Check the Alerts page.</p>
+</section>
+{{end}}
+
+<section class="card{{if gt $d.Reverted 0}} mt-6{{end}}">
+  <h2>Pending (mpool / in-flight)</h2>
+  {{if not $d.Pending}}
+  <p class="muted text-sm">No pending messages. Mempool is clear for this node's senders.</p>
+  {{else}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Reason</th><th>From</th><th>Nonce</th><th>Tx hash</th><th>Sent</th><th>State</th></tr></thead>
+      <tbody>
+        {{range $d.Pending}}
+        <tr>
+          <td class="mono">{{if .Reason.Valid}}{{.Reason.String}}{{else}}—{{end}}</td>
+          <td class="mono text-xs muted">{{if .FromAddr.Valid}}{{.FromAddr.String}}{{else}}—{{end}}</td>
+          <td class="mono">{{if .Nonce.Valid}}{{.Nonce.Int64}}{{else}}—{{end}}</td>
+          <td class="mono text-xs">{{.Hash}}</td>
+          <td class="mono text-xs muted">{{if .SendTime.Valid}}{{.SendTime.String}}{{else}}—{{end}}</td>
+          <td>
+            {{if eq .StateLabel "send-failed"}}<span class="pill pill-fail">send-failed</span>
+            {{else}}<span class="pill pill-mute">pending</span>{{end}}
+          </td>
+        </tr>
+        {{if and .SendErr.Valid .SendErr.String}}
+        <tr><td colspan="6" class="mono text-xs text-rose">send error: {{.SendErr.String}}</td></tr>
+        {{end}}
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</section>
+
+<section class="card mt-6">
+  <h2>History (confirmed, last 100)</h2>
+  {{if not $d.History}}
+  <p class="muted text-sm">No confirmed messages yet.</p>
+  {{else}}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Reason</th><th>From</th><th>Nonce</th><th>Block</th><th>Tx hash</th><th>Outcome</th></tr></thead>
+      <tbody>
+        {{range $d.History}}
+        <tr>
+          <td class="mono">{{if .Reason.Valid}}{{.Reason.String}}{{else}}—{{end}}</td>
+          <td class="mono text-xs muted">{{if .FromAddr.Valid}}{{.FromAddr.String}}{{else}}—{{end}}</td>
+          <td class="mono">{{if .Nonce.Valid}}{{.Nonce.Int64}}{{else}}—{{end}}</td>
+          <td class="mono text-xs">{{if .Block.Valid}}{{.Block.Int64}}{{else}}—{{end}}</td>
+          <td class="mono text-xs">{{.Hash}}</td>
+          <td>
+            {{if eq .StateLabel "REVERTED"}}<span class="pill pill-fail">REVERTED</span>
+            {{else if eq .StateLabel "success"}}<span class="pill pill-ok">success</span>
+            {{else}}<span class="pill pill-mute">{{.StateLabel}}</span>{{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted text-xs mt-2">Note: gas cost columns are wired in the handler but require receipt gas fields; current build shows status + nonce + block. Cost display lands with the receipt-gas backfill (see TODO).</p>
+  {{end}}
+</section>
+{{template "_close_body" .}}{{end}}

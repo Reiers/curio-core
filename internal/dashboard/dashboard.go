@@ -141,6 +141,7 @@ func (s *Server) Routes(r chi.Router) {
 	r.Get("/datasets", s.handleDatasets)
 	r.Get("/rails", s.handleRails)
 	r.Get("/tasks", s.handleTasks)
+	r.Get("/messages", s.handleMessages)
 	r.Get("/alerts", s.handleAlerts)
 	r.Get("/storage", s.handleStorage)
 	r.Get("/upload", s.handleUploadPage)
@@ -633,6 +634,99 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, title, message, severity, ack, created_at
 		 FROM alerts ORDER BY ack ASC, id DESC LIMIT 100`)
 	s.render(w, "alerts", "Alerts", "alerts", d)
+}
+
+type messageRow struct {
+	Hash        string        `db:"signed_tx_hash"`
+	Reason      sqlNullString `db:"send_reason"`
+	FromAddr    sqlNullString `db:"from_address"`
+	ToAddr      sqlNullString `db:"to_address"`
+	Nonce       sqlNullInt64  `db:"nonce"`
+	Status      sqlNullString `db:"tx_status"`
+	Success     sqlNullInt64  `db:"tx_success"`
+	Block       sqlNullInt64  `db:"confirmed_block_number"`
+	SendTime    sqlNullString `db:"send_time"`
+	SendErr     sqlNullString `db:"send_error"`
+	GasUsed     sqlNullInt64  `db:"gas_used"`
+	GasPriceWei sqlNullString `db:"gas_price_wei"`
+	CostFIL     string        // computed: gas_used * gas_price, formatted
+	StateLabel  string        // computed: pending | success | REVERTED | send-failed
+}
+
+type messagesData struct {
+	Pending  []messageRow
+	History  []messageRow
+	Reverted int
+}
+
+// handleMessages renders the mpool / message view: pending (in-flight) txs,
+// confirmed history with on-chain success/REVERT status, nonce, and cost.
+// This is the operator-honest view: a task can report success while its tx
+// reverted on-chain, and that REVERT is shown here in red (and alerted).
+func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
+	d := messagesData{}
+
+	// Pending = sent locally, not yet confirmed (or never tracked as confirmed).
+	_ = s.db.SelectI(r.Context(), &d.Pending, `
+		SELECT s.signed_hash AS signed_tx_hash,
+		       s.send_reason  AS send_reason,
+		       s.from_address AS from_address,
+		       s.to_address   AS to_address,
+		       s.nonce        AS nonce,
+		       COALESCE(w.tx_status,'pending') AS tx_status,
+		       w.tx_success   AS tx_success,
+		       w.confirmed_block_number AS confirmed_block_number,
+		       s.send_time    AS send_time,
+		       s.send_error   AS send_error,
+		       NULL AS gas_used, NULL AS gas_price_wei
+		FROM message_sends_eth s
+		LEFT JOIN message_waits_eth w ON lower(w.signed_tx_hash)=lower(s.signed_hash)
+		WHERE s.signed_hash IS NOT NULL
+		  AND (w.tx_status IS NULL OR w.tx_status='pending')
+		ORDER BY s.nonce DESC LIMIT 50`)
+
+	// History = confirmed (success or revert), newest first.
+	_ = s.db.SelectI(r.Context(), &d.History, `
+		SELECT w.signed_tx_hash AS signed_tx_hash,
+		       s.send_reason  AS send_reason,
+		       s.from_address AS from_address,
+		       s.to_address   AS to_address,
+		       s.nonce        AS nonce,
+		       w.tx_status    AS tx_status,
+		       w.tx_success   AS tx_success,
+		       w.confirmed_block_number AS confirmed_block_number,
+		       s.send_time    AS send_time,
+		       s.send_error   AS send_error,
+		       NULL AS gas_used, NULL AS gas_price_wei
+		FROM message_waits_eth w
+		LEFT JOIN message_sends_eth s ON lower(s.signed_hash)=lower(w.signed_tx_hash)
+		WHERE w.tx_status='confirmed' OR w.tx_status='failed'
+		ORDER BY w.confirmed_block_number DESC, w.rowid DESC LIMIT 100`)
+
+	label := func(m *messageRow) {
+		switch {
+		case m.SendErr.Valid && m.SendErr.String != "":
+			m.StateLabel = "send-failed"
+		case !m.Status.Valid || m.Status.String == "pending":
+			m.StateLabel = "pending"
+		case m.Success.Valid && m.Success.Int64 == 0:
+			m.StateLabel = "REVERTED"
+		case m.Success.Valid && m.Success.Int64 == 1:
+			m.StateLabel = "success"
+		default:
+			m.StateLabel = m.Status.String
+		}
+	}
+	for i := range d.Pending {
+		label(&d.Pending[i])
+	}
+	for i := range d.History {
+		label(&d.History[i])
+		if d.History[i].StateLabel == "REVERTED" {
+			d.Reverted++
+		}
+	}
+	s.render(w, "messages", "Messages", "messages", d)
 }
 
 // ----- helpers --------------------------------------------------------
