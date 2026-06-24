@@ -40,6 +40,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Reiers/curio-core/internal/alerts"
+
 	"github.com/filecoin-project/curio/lib/ethchain"
 	"github.com/filecoin-project/curio/lib/filecoinpayment"
 	"github.com/filecoin-project/curio/pdp/contract"
@@ -142,7 +144,11 @@ func (s *Server) Routes(r chi.Router) {
 	r.Get("/rails", s.handleRails)
 	r.Get("/tasks", s.handleTasks)
 	r.Get("/messages", s.handleMessages)
+	r.Post("/messages/clear-stale", s.handleClearStaleMessages)
+	r.Post("/messages/retry-proving", s.handleRetryProving)
 	r.Get("/alerts", s.handleAlerts)
+	r.Post("/alerts/{id}/ack", s.handleAckAlert)
+	r.Post("/alerts/clear", s.handleClearAlerts)
 	r.Get("/storage", s.handleStorage)
 	r.Get("/upload", s.handleUploadPage)
 	r.Get("/terminal", s.handleTerminalPage)
@@ -560,16 +566,8 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 type alertsData struct {
-	Alerts []alertRow
-}
-
-type alertRow struct {
-	ID       int64         `db:"id"`
-	Title    string        `db:"title"`
-	Message  sqlNullString `db:"message"`
-	Severity string        `db:"severity"`
-	Ack      int64         `db:"ack"`
-	Created  string        `db:"created_at"`
+	Alerts  []alerts.Alert
+	Unacked int
 }
 
 type storageData struct {
@@ -630,10 +628,31 @@ func (s *Server) handleTerminalPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	d := alertsData{}
-	_ = s.db.SelectI(r.Context(), &d.Alerts,
-		`SELECT id, title, message, severity, ack, created_at
-		 FROM alerts ORDER BY ack ASC, id DESC LIMIT 100`)
+	rows, err := alerts.Recent(r.Context(), s.db, 100, false)
+	if err == nil {
+		d.Alerts = rows
+		for _, a := range rows {
+			if a.Acked == 0 {
+				d.Unacked++
+			}
+		}
+	}
 	s.render(w, "alerts", "Alerts", "alerts", d)
+}
+
+// handleAckAlert acks a single alert by id, then redirects back to /alerts.
+func (s *Server) handleAckAlert(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if id > 0 {
+		_, _ = alerts.Ack(r.Context(), s.db, id)
+	}
+	http.Redirect(w, r, "/alerts", http.StatusSeeOther)
+}
+
+// handleClearAlerts acks ALL unacked alerts, then redirects back to /alerts.
+func (s *Server) handleClearAlerts(w http.ResponseWriter, r *http.Request) {
+	_, _ = alerts.AckAll(r.Context(), s.db)
+	http.Redirect(w, r, "/alerts", http.StatusSeeOther)
 }
 
 type messageRow struct {
@@ -727,6 +746,62 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, "messages", "Messages", "messages", d)
+}
+
+// handleClearStaleMessages removes orphaned message_sends_eth rows whose nonce is
+// already below the on-chain (confirmed) nonce for their sender AND which have no
+// active wait row. These are superseded/already-mined sends that were never
+// wait-tracked (e.g. early admin-test-tx + untracked proves); they linger as
+// "pending" in the mpool view forever. Removing them makes the view truthful.
+// Safe: it only deletes rows the chain has already moved past.
+func (s *Server) handleClearStaleMessages(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if s.eth == nil {
+		http.Redirect(w, r, "/messages", http.StatusSeeOther)
+		return
+	}
+	// Resolve each sender's on-chain nonce and delete sends below it that have
+	// no confirmed/pending wait row.
+	var senders []struct {
+		From string `db:"from_address"`
+	}
+	_ = s.db.SelectI(ctx, &senders, `SELECT DISTINCT from_address FROM message_sends_eth`)
+	for _, snd := range senders {
+		onchainNonce, err := s.eth.PendingNonceAt(ctx, common.HexToAddress(snd.From))
+		if err != nil {
+			continue // can't verify => don't delete
+		}
+		// Only delete TRUE orphans: sends with NO wait row at all, whose nonce is
+		// already below the on-chain nonce (so the chain has definitively moved
+		// past them). Properly wait-tracked sends (pending or confirmed) are left
+		// alone so the history view stays intact.
+		_, _ = s.db.ExecI(ctx, `
+			DELETE FROM message_sends_eth
+			WHERE from_address = $1
+			  AND nonce IS NOT NULL
+			  AND nonce < $2
+			  AND signed_hash NOT IN (SELECT signed_tx_hash FROM message_waits_eth)
+		`, snd.From, int64(onchainNonce))
+	}
+	http.Redirect(w, r, "/messages", http.StatusSeeOther)
+}
+
+// handleRetryProving re-arms the proving period for all live datasets that are
+// not currently scheduled, by nudging prove_at_epoch so the NextProvingPeriod
+// task re-fires (the clamp guard then computes a valid challenge epoch). This is
+// the operator "retry" for a stuck/reverted proving schedule. It does NOT touch
+// piece data; it only re-triggers scheduling.
+func (s *Server) handleRetryProving(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	// Clear any drifted/failed schedule anchor so the chain-sched handler re-picks
+	// the dataset; the NextProvingPeriod task + clamp guard re-arm it correctly.
+	_, _ = s.db.ExecI(ctx, `
+		UPDATE pdp_data_sets
+		SET challenge_request_task_id = NULL,
+		    next_prove_attempt_at     = NULL
+		WHERE unrecoverable_proving_failure_epoch IS NULL
+		  AND terminated_at_epoch IS NULL`)
+	http.Redirect(w, r, "/messages", http.StatusSeeOther)
 }
 
 // ----- helpers --------------------------------------------------------

@@ -245,6 +245,20 @@ func Ack(ctx context.Context, db harmonyquery.DBInterface, id int64) (int, error
 	return res, nil
 }
 
+// AckAll acknowledges every currently-unacked alert. Returns the number of rows
+// affected. Used by the dashboard "Clear alerts" action.
+func AckAll(ctx context.Context, db harmonyquery.DBInterface) (int, error) {
+	res, err := db.ExecI(ctx, `
+		UPDATE curio_alerts
+		SET acked = 1, acked_at = $1
+		WHERE acked = 0
+	`, time.Now().UnixMilli())
+	if err != nil {
+		return 0, fmt.Errorf("alerts.AckAll: %w", err)
+	}
+	return res, nil
+}
+
 // Counts returns total / unacked / by-severity counts for dashboard use.
 type Counts struct {
 	Total      int64            `json:"total"`

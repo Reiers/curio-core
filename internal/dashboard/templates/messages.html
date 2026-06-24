@@ -9,7 +9,19 @@
 {{end}}
 
 <section class="card{{if gt $d.Reverted 0}} mt-6{{end}}">
-  <h2>Pending (mpool / in-flight)</h2>
+  <div class="section-head">
+    <h2>Pending (mpool / in-flight)</h2>
+    <div style="display:flex;gap:.5rem;align-items:center">
+      <form method="post" action="/messages/retry-proving" style="margin:0"
+            onsubmit="return confirm('Re-arm proving for all live datasets? This clears the schedule anchor so the NextProvingPeriod task re-fires (clamp guard picks a valid epoch). Piece data is untouched.')">
+        <button type="submit" class="btn btn-ghost btn-xs">Retry proving</button>
+      </form>
+      <form method="post" action="/messages/clear-stale" style="margin:0"
+            onsubmit="return confirm('Remove orphaned sends whose nonce is already below the on-chain nonce (superseded/already-mined, never wait-tracked)? Safe \u2014 only deletes what the chain has moved past.')">
+        <button type="submit" class="btn btn-ghost btn-xs">Clear stale</button>
+      </form>
+    </div>
+  </div>
   {{if not $d.Pending}}
   <p class="muted text-sm">No pending messages. Mempool is clear for this node's senders.</p>
   {{else}}
