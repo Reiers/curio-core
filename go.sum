@@ -69,6 +69,8 @@ github.com/Reiers/curio v1.27.3-0.20260625105854-2c80423bfecd h1:vuh78GQe/ELYcRn
 github.com/Reiers/curio v1.27.3-0.20260625105854-2c80423bfecd/go.mod h1:3+p3lS4LKEhAACPUEQtuQhWOz0ylJBDVVbxeS0KiADY=
 github.com/Reiers/curio v1.27.3-0.20260710122403-67afa485b147 h1:jTbDyhHaFxm50SZcuoSyEFDMjyWmTKKV9v7Q8L+/tME=
 github.com/Reiers/curio v1.27.3-0.20260710122403-67afa485b147/go.mod h1:3+p3lS4LKEhAACPUEQtuQhWOz0ylJBDVVbxeS0KiADY=
+github.com/Reiers/curio v1.27.3-0.20260710130040-babaf65d4698 h1:/5uA1YEpYEmcyiFZWdlNRHXFHdsQpstMgfgdLlyt+qg=
+github.com/Reiers/curio v1.27.3-0.20260710130040-babaf65d4698/go.mod h1:3+p3lS4LKEhAACPUEQtuQhWOz0ylJBDVVbxeS0KiADY=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13 h1:DDNL54LfDcuIQDRR9W8qE2XtQt0Y5oPOI9TVe+u9GoA=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
 github.com/Reiers/lantern v1.7.24 h1:BwsCeDonZXJcUe3qNBdrAR8aVYlfGrqKWWLWZHReS6A=

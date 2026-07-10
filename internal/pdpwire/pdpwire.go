@@ -30,6 +30,7 @@ import (
 	"github.com/filecoin-project/curio/lib/chainsched"
 	"github.com/filecoin-project/curio/lib/ethchain"
 	curiopaths "github.com/filecoin-project/curio/lib/paths"
+	"github.com/filecoin-project/curio/lib/paths/alertinginterface"
 	upstreampdp "github.com/filecoin-project/curio/pdp"
 	pdpcontract "github.com/filecoin-project/curio/pdp/contract"
 	"github.com/filecoin-project/curio/tasks/message"
@@ -215,15 +216,25 @@ func BuildChainDeps(ctx context.Context, dbConcrete *harmonysqlite.DB, stashDir 
 		return nil, fmt.Errorf("build embedded chainsched node api: %w", err)
 	}
 	sched := chainsched.New(nodeForSched)
-	pdpv0.NewDataSetWatch(db, ethC, sched, network)
-	pdpv0.NewTerminateServiceWatcher(db, ethC, sched, network)
-	pdpv0.NewDataSetDeleteWatcher(db, ethC, sched, network)
+
+	// Upstream #1323 routes every PDPv0 chain handler through a single
+	// async ordered watcher instead of registering each one directly on
+	// the chain scheduler. The watcher groups callbacks into phases
+	// (CreateAndAdd -> Terminate -> PaymentSettle -> Delete ->
+	// CleanupPieces -> Proving) and runs each phase to completion before
+	// the next, so chain-derived state is reconciled into the DB before the
+	// Proving-phase handlers (Init/Next/Prove) inspect it on the same
+	// tipset. The watcher itself registers one handler on the scheduler.
+	pdpWatcher := pdpv0.NewPDPv0Watcher(db, ethC, sched, noopAlerting{})
+	pdpv0.NewDataSetWatch(pdpWatcher, network)
+	pdpv0.NewTerminateServiceWatcher(pdpWatcher, network)
+	pdpv0.NewDataSetDeleteWatcher(pdpWatcher, network)
 	// Lifecycle sweeper: tipset-driven recovery for #57 (audit on #29).
 	// Re-arms datasets after ProveTask MaxFailures exhaustion and logs
 	// stuck pdp_piece_uploads where notify cascade-cleared the task_id.
-	// Runs on every tipset (~30s) instead of waiting for ChainSync's
-	// 8h interval.
-	if err := pdpv0.NewLifecycleSweeper(db, sched); err != nil {
+	// Runs in the CleanupPieces phase (before Proving) on every tipset
+	// (~30s) instead of waiting for ChainSync's 8h interval.
+	if err := pdpv0.NewLifecycleSweeper(pdpWatcher); err != nil {
 		return nil, fmt.Errorf("register lifecycle sweeper: %w", err)
 	}
 
@@ -251,9 +262,16 @@ func BuildChainDeps(ctx context.Context, dbConcrete *harmonysqlite.DB, stashDir 
 	cpr := cachedreader.NewCachedPieceReader(db, nil /* sectorReader */, ppr, idxStore)
 
 	saveCache := pdpv0.NewTaskPDPSaveCache(db, cpr, idxStore)
-	initPP := pdpv0.NewInitProvingPeriodTask(db, ethC, nodeC.FullNode(), sched, senderEth, network)
-	nextPP := pdpv0.NewNextProvingPeriodTask(db, ethC, nodeC.FullNode(), sched, senderEth, network)
-	proveTask := pdpv0.NewProveTask(sched, db, ethC, nodeC.FullNode(), senderEth, cpr, idxStore, network)
+	initPP := pdpv0.NewInitProvingPeriodTask(db, ethC, nodeC.FullNode(), pdpWatcher, senderEth, network)
+	nextPP := pdpv0.NewNextProvingPeriodTask(db, ethC, nodeC.FullNode(), pdpWatcher, senderEth, network)
+	proveTask := pdpv0.NewProveTask(db, ethC, nodeC.FullNode(), pdpWatcher, senderEth, cpr, idxStore, network)
+
+	// Start the watcher's phase-ordering consumer goroutine. It reads from
+	// a buffered channel that only receives once sched.Run() begins
+	// delivering tipsets (the engine starts sched.Run after all handlers
+	// are registered), so starting it here — before Start — is safe. The
+	// goroutine exits when ctx is cancelled.
+	pdpWatcher.Run(ctx)
 
 	return &ChainDeps{
 		NodeAPI:               nodeC.FullNode(),
@@ -288,6 +306,21 @@ func pdpNetworkFromLantern(d *lanterndaemon.Daemon) pdpcontract.Network {
 		return pdpcontract.NetworkMainnet
 	}
 }
+
+// noopAlerting satisfies alertinginterface.AlertingInterface for the PDPv0
+// async ordered watcher (upstream #1323). curio-core surfaces failures through
+// its own DB-polling alerts.Poller (harmony_task_history + message_waits_eth),
+// and every watcher callback already logs its own errors, so the interface's
+// Raise/Resolve calls are intentionally dropped here. Routing PDPv0 watcher
+// alerts into the curio-core alert store is a possible future enhancement.
+type noopAlerting struct{}
+
+func (noopAlerting) AddAlertType(name, id string) alertinginterface.AlertType {
+	return alertinginterface.AlertType{System: id, Subsystem: name}
+}
+func (noopAlerting) Raise(alertinginterface.AlertType, map[string]any)      {}
+func (noopAlerting) IsRaised(alertinginterface.AlertType) bool              { return false }
+func (noopAlerting) Resolve(alertinginterface.AlertType, map[string]string) {}
 
 // Mount builds the PDPService and mounts its routes onto r. Pass deps
 // from BuildChainDeps (nil-safe).
