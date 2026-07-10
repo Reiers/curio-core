@@ -483,6 +483,13 @@ Flags:
 	if chainDeps != nil && chainDeps.SendTaskETH != nil {
 		extraTasks = append(extraTasks, chainDeps.SendTaskETH)
 	}
+	// Prune confirmed message_waits_eth rows older than the retention
+	// window (upstream: 30 days). Without a GC the receipts table grows
+	// forever and the pending-tx scan slows down over time. Requires an
+	// eth client for BlockNumber; singleton task, cheap.
+	if chainDeps != nil && chainDeps.EthClient != nil {
+		extraTasks = append(extraTasks, message.NewMessageWaitsEthGCTask(eng.DB(), chainDeps.EthClient))
+	}
 	if chainDeps != nil && chainDeps.ChainSync != nil {
 		extraTasks = append(extraTasks, chainDeps.ChainSync)
 	}
