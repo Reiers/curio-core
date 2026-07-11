@@ -54,3 +54,16 @@ Use upstream Curio if you need any of:
 
 Curio Core is for the single-node hot-storage shape. Upstream Curio is the right
 choice for everything else.
+
+## Structural absence of five upstream GA-blockers
+
+Five open GA-blockers on the upstream hot-storage / PDP path
+(filecoin-project/curio [#1310](https://github.com/filecoin-project/curio/issues/1310),
+[#1303](https://github.com/filecoin-project/curio/issues/1303),
+[#1296](https://github.com/filecoin-project/curio/issues/1296),
+[#1291](https://github.com/filecoin-project/curio/issues/1291),
+[#1282](https://github.com/filecoin-project/curio/issues/1282))
+stem from the Yugabyte / PieceGC / cleanup-pieces / IPNI-storm design.
+Curio Core does not carry the code that produces any of them. See
+[Scale mitigations](/concepts/scale-mitigations) for the one-per-item
+evidence map and the two Go tests that keep the invariants honest.

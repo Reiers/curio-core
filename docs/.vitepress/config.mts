@@ -52,6 +52,7 @@ export default defineConfig({
           { text: 'PDP proof loop',        link: '/concepts/pdp-proofs' },
           { text: 'USDFC payment rails',   link: '/concepts/payment-rails' },
           { text: 'harmonytask scheduler', link: '/concepts/harmonytask' },
+          { text: 'Scale mitigations',    link: '/concepts/scale-mitigations' },
         ],
       },
       {

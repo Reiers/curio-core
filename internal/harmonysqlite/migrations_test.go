@@ -356,3 +356,110 @@ func TestApplyMigrations_TaskCompletionDeleteWorks(t *testing.T) {
 		t.Errorf("pdp_prove_tasks.data_set column missing (still v1 'proofset' shape?): %v", err)
 	}
 }
+
+// TestApplyMigrations_PiecerefsHarmonyTaskFKsAreSetNull is a structural
+// guard for curio-core's mitigation of upstream Curio #1291 (PDPv0_IPNI
+// serialization storm + stranded piecerefs). The stranded-pieceref half
+// of that class was closed by declaring every FK column on pdp_piecerefs
+// (and pdp_piece_uploads.notify_task_id) that references harmony_task
+// with ON DELETE SET NULL, so a completed / deleted task cannot leave
+// the row pinned to a dead task id.
+//
+// This test applies every embedded migration, reads back the FK shape
+// via pragma_foreign_key_list, and fails if any of the load-bearing FK
+// columns targeting harmony_task uses anything other than SET NULL.
+//
+// Adding a new task_id column on either table? Make it SET NULL (not
+// CASCADE, not RESTRICT, not NO ACTION) and add it to the wantSetNull
+// list below.
+//
+// Cross-refs: #87 (verify + document GA-blocker mitigations),
+// filecoin-project/curio#1291.
+func TestApplyMigrations_PiecerefsHarmonyTaskFKsAreSetNull(t *testing.T) {
+	db, err := Open(Config{Path: ":memory:", ForeignKeys: true})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := db.ApplyMigrations(ctx); err != nil {
+		t.Fatalf("ApplyMigrations: %v", err)
+	}
+
+	// (table, column) pairs that MUST FK to harmony_task with
+	// ON DELETE SET NULL. Each corresponds to a documented mitigation
+	// in docs/concepts/scale-mitigations.md.
+	wantSetNull := []struct {
+		table  string
+		column string
+	}{
+		{"pdp_piecerefs", "save_cache_task_id"},
+		{"pdp_piecerefs", "indexing_task_id"},
+		{"pdp_piecerefs", "ipni_task_id"},
+		{"pdp_piece_uploads", "notify_task_id"},
+	}
+
+	for _, tc := range wantSetNull {
+		tc := tc
+		t.Run(tc.table+"."+tc.column, func(t *testing.T) {
+			// Confirm the column exists at all. Columns can vanish under a
+			// bad rebase; better a clear error than a silent skip.
+			var colName string
+			err := db.QueryRow(ctx,
+				`SELECT name FROM pragma_table_info(?) WHERE name = ?`,
+				tc.table, tc.column).Scan(&colName)
+			if err != nil {
+				t.Fatalf("%s.%s missing from schema: %v", tc.table, tc.column, err)
+			}
+
+			// pragma_foreign_key_list columns:
+			//   id, seq, table, from, to, on_update, on_delete, match.
+			rows, err := db.Query(ctx,
+				`SELECT [table], [from], on_delete
+				   FROM pragma_foreign_key_list(?)
+				  WHERE [from] = ?`,
+				tc.table, tc.column)
+			if err != nil {
+				t.Fatalf("pragma_foreign_key_list(%s): %v", tc.table, err)
+			}
+			defer rows.Close()
+
+			var (
+				found    bool
+				targetT  string
+				onDelete string
+			)
+			for rows.Next() {
+				var target, from, od string
+				if err := rows.Scan(&target, &from, &od); err != nil {
+					t.Fatalf("scan foreign_key_list row: %v", err)
+				}
+				if from != tc.column {
+					continue
+				}
+				found = true
+				targetT = target
+				onDelete = od
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatalf("iterate foreign_key_list: %v", err)
+			}
+
+			if !found {
+				t.Fatalf("%s.%s has no FK declared (mitigation for "+
+					"filecoin-project/curio#1291 requires FK to harmony_task "+
+					"with ON DELETE SET NULL, see #87)", tc.table, tc.column)
+			}
+			if targetT != "harmony_task" {
+				t.Errorf("%s.%s FKs to %q, want harmony_task",
+					tc.table, tc.column, targetT)
+			}
+			if onDelete != "SET NULL" {
+				t.Errorf("%s.%s ON DELETE = %q, want \"SET NULL\" "+
+					"(anything else can strand piecerefs on task delete, "+
+					"see docs/concepts/scale-mitigations.md and #87)",
+					tc.table, tc.column, onDelete)
+			}
+		})
+	}
+}
