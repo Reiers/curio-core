@@ -65,12 +65,12 @@ github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20260410132809-b5b06616014a h1:JsGTdH9SgerI6M+rEk3FSIreEL3AI87ZSSDq3+Z/Gic=
 github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20260410132809-b5b06616014a/go.mod h1:ioLG6R+5bUSO1oeGSDxOV3FADARuMoytZCSX6MEMQkI=
-github.com/Reiers/curio v1.27.3-0.20260710210859-9948c2a48a15 h1:88vp6xdZ0ovGqGAiq7DezXnmxV/5WryOXQZBVRd0/u0=
-github.com/Reiers/curio v1.27.3-0.20260710210859-9948c2a48a15/go.mod h1:3+p3lS4LKEhAACPUEQtuQhWOz0ylJBDVVbxeS0KiADY=
+github.com/Reiers/curio v1.27.3-0.20260711150727-18fe4ea4bd25 h1:MPMoBbtaOLFRXDTR/iwAQmi234cbnoOnmjhTE46PH1o=
+github.com/Reiers/curio v1.27.3-0.20260711150727-18fe4ea4bd25/go.mod h1:3+p3lS4LKEhAACPUEQtuQhWOz0ylJBDVVbxeS0KiADY=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13 h1:DDNL54LfDcuIQDRR9W8qE2XtQt0Y5oPOI9TVe+u9GoA=
 github.com/Reiers/harmonyquery v1.0.3-0.20260523144337-9d08b5085c13/go.mod h1:ih3N/QVNhPcps+cIWBk/s+hYRz5QEJ+9Lkc841K7xXY=
-github.com/Reiers/lantern v1.7.24 h1:BwsCeDonZXJcUe3qNBdrAR8aVYlfGrqKWWLWZHReS6A=
-github.com/Reiers/lantern v1.7.24/go.mod h1:SJU9xjD3jbRGjCJH0AN1havJScFkU1vbslhWrKmR5Rg=
+github.com/Reiers/lantern v1.9.0-rc1.0.20260714194313-646ea5376ef8 h1:akS8eZ90l8wDEOJrfLjZ2jOb3A3WXJ/vmSBzn9Y41CM=
+github.com/Reiers/lantern v1.9.0-rc1.0.20260714194313-646ea5376ef8/go.mod h1:jxda44IklixFjEnSljXurtnZ4aLB3eWzTMEBoKSgz3E=
 github.com/Reiers/lotus v0.2.11-0.20260523143243-6f450583a634 h1:AGcxPZVwh+zkLuWSlRytFq3jUxF6jlSA2c7w/BVZYyw=
 github.com/Reiers/lotus v0.2.11-0.20260523143243-6f450583a634/go.mod h1:tzFOxSSszbfgocCRMsAraa9C3Jj3iEIEiOY9Pf9CsmY=
 github.com/Stebalien/go-bitfield v0.0.1/go.mod h1:GNjFpasyUVkHMsfEOk8EFLJ9syQ6SI+XWrX9Wf2XH0s=
@@ -1116,6 +1116,8 @@ github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR
 github.com/russross/blackfriday/v2 v2.0.1/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
+github.com/rvagg/go-skellam-pmf v0.0.2 h1:UZpUgaBSLjChrD6s8yVkZy1q6CJ2fdm1Y8B6lfg+E08=
+github.com/rvagg/go-skellam-pmf v0.0.2/go.mod h1:/xSBO272x+iW1BjHnPL6p2O7kCpVTh7QK9hZcXE/Kqk=
 github.com/ryanuber/columnize v0.0.0-20160712163229-9b3edd62028f/go.mod h1:sm1tb6uqfes/u+d4ooFouqFdy9/2g9QGwK3SQygK0Ts=
 github.com/samber/lo v1.53.0 h1:t975lj2py4kJPQ6haz1QMgtId2gtmfktACxIXArw3HM=
 github.com/samber/lo v1.53.0/go.mod h1:4+MXEGsJzbKGaUEQFKBq2xtfuznW9oz/WrgyzMzRoM0=
