@@ -1,152 +1,155 @@
 {{define "overview"}}{{template "_head" .}}{{template "_open_body" .}}
 {{$d := .Data}}
-<section class="grid grid-4">
-  <div class="card card-tight">
-    <div class="stat-label">Chain head (epoch)</div>
-    <div class="stat-num text-brand glow">{{$d.Chain.HeadEpoch}}</div>
-    <div class="stat-sub mono">{{$d.Chain.NetworkID}}</div>
+
+<!-- chain-health strip: served entirely off the embedded Lantern node -->
+<div class="chain-strip">
+  <div class="cs-item">
+    <span class="dot-status {{if and $d.Chain.Reachable $d.Chain.Synced}}ok{{else if $d.Chain.Reachable}}warn{{else}}fail{{end}}"></span>
+    <span class="cs-label">Chain</span>
+    <span class="cs-val">{{if and $d.Chain.Reachable $d.Chain.Synced}}synced{{else if $d.Chain.Reachable}}connecting{{else}}offline{{end}}</span>
   </div>
-  <div class="card card-tight">
+  <div class="cs-sep"></div>
+  <div class="cs-item"><span class="cs-label">Epoch</span><span class="cs-val text-brand">{{$d.Chain.HeadEpoch}}</span></div>
+  <div class="cs-item"><span class="cs-label">Network</span><span class="cs-val">{{$d.Chain.NetworkID}}</span></div>
+  <div class="cs-item"><span class="cs-label">Peers</span><span class="cs-val">{{$d.Chain.Peers}}</span></div>
+  <div class="cs-item"><span class="cs-label">Pending tx</span><span class="cs-val">{{$d.Chain.PendingTxCnt}}</span></div>
+  {{if filSpot $d.Price}}
+  <div class="cs-sep"></div>
+  <div class="cs-item">
+    <span class="cs-label">FIL</span>
+    <span class="cs-val text-ok">{{filSpot $d.Price}}</span>
+    {{if not $d.Price.Fresh}}<span class="pill pill-mute" title="cached / last-known rate">stale</span>{{end}}
+  </div>
+  {{end}}
+  <div class="ml-auto cs-item"><span class="dot-status idle"></span><span class="cs-label">zero-Glif · embedded node</span></div>
+</div>
+
+<!-- KPI tiles -->
+<section class="grid grid-4">
+  <div class="card card-tight kpi kpi-brand">
     <div class="stat-label">Active datasets</div>
-    <div class="stat-num text-emerald">{{$d.Stats.DatasetsActive}}</div>
+    <div class="stat-num text-brand">{{$d.Stats.DatasetsActive}}</div>
     <div class="stat-sub">{{$d.Stats.DatasetsTerminated}} terminated</div>
   </div>
-  <div class="card card-tight">
+  <div class="card card-tight kpi">
     <div class="stat-label">Pieces stored</div>
     <div class="stat-num">{{$d.Stats.PiecesCompleteCount}}</div>
     <div class="stat-sub mono">{{humanBytes $d.Stats.PiecesCompleteBytes}}</div>
   </div>
-  <div class="card card-tight">
+  <div class="card card-tight kpi kpi-ok">
     <div class="stat-label">Active rails</div>
-    <div class="stat-num text-accent">{{$d.Stats.RailsActive}}</div>
+    <div class="stat-num text-ok">{{$d.Stats.RailsActive}}</div>
     <div class="stat-sub">{{$d.Stats.RailsTerminated}} terminated</div>
   </div>
+  <div class="card card-tight kpi kpi-info">
+    <div class="stat-label">Projected income · 30d</div>
+    {{if $d.Fin.Unavailable}}
+      <div class="stat-num sm text-dim">—</div>
+      <div class="stat-sub">rate source offline</div>
+    {{else}}
+      <div class="stat-num sm money text-info">{{bigZero $d.Fin.RatePer30d}}<span class="stat-sub" style="display:inline"> USDFC</span></div>
+      <div class="stat-sub">{{bigZero $d.Fin.RatePerDay}} USDFC/day · {{$d.Fin.ActiveRails}} rails</div>
+    {{end}}
+  </div>
+</section>
+
+<section class="grid grid-2-1">
+  <!-- server-verified readiness checklist -->
+  <div class="card">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+      SP readiness
+      <span class="h2-right readiness-head">
+        <span class="readiness-score {{if $d.Readiness.AllReady}}text-ok{{else}}text-warn{{end}}">{{$d.Readiness.OK}}<span class="text-dim" style="font-size:14px">/{{$d.Readiness.Total}}</span></span>
+        {{if $d.Readiness.AllReady}}<span class="pill pill-ok">ready</span>{{else}}<span class="pill pill-warn">attention</span>{{end}}
+      </span>
+    </h2>
+    <div class="checklist">
+      {{range $d.Readiness.Items}}
+      <div class="check-row">
+        <span class="check-icon {{stateClass .State}}">{{stateIcon .State}}</span>
+        <div class="check-main">
+          <div class="check-label">{{.Label}}</div>
+          <div class="check-detail">{{.Detail}}</div>
+        </div>
+        {{if .Critical}}<span class="check-crit">required</span>{{end}}
+      </div>
+      {{end}}
+    </div>
+  </div>
+
+  <!-- income projection -->
+  <div class="card">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Income (projected)
+    </h2>
+    {{if $d.Fin.Unavailable}}
+      <div class="empty-state">Rail rate source unavailable<div class="hint">eth client not wired — projection hidden</div></div>
+    {{else}}
+      <div class="mb-4">
+        <div class="stat-label">Per epoch</div>
+        <div class="stat-num sm money">{{dec6 $d.Fin.RatePerEpoch}} <span class="text-dim" style="font-size:13px">USDFC</span></div>
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        <div><div class="stat-label">Per day</div><div class="stat-num sm money text-ok">{{bigZero $d.Fin.RatePerDay}}</div></div>
+        <div><div class="stat-label">Per 30d</div><div class="stat-num sm money text-info">{{bigZero $d.Fin.RatePer30d}}</div></div>
+      </div>
+      <div class="stat-sub mt-4">Projection = current on-chain rail rate × time. Not settled revenue. <a href="/rails" class="text-brand">Rails →</a></div>
+    {{end}}
+  </div>
 </section>
 
 <section class="grid grid-2">
   <div class="card">
     <h2>
-      <svg style="color:#34d399" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12.55a11 11 0 0 1 14 0M2 8.82a16 16 0 0 1 20 0M8.5 16.4a6 6 0 0 1 7 0M12 20h.01"/></svg>
-      Chain connectivity
-    </h2>
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>RPC source</th><th>Reachable</th><th>Sync</th><th>Network</th><th>Version</th></tr></thead>
-        <tbody>
-          <tr>
-            <td class="mono text-xs">{{$d.Chain.RPCAddress}}</td>
-            <td>{{if $d.Chain.Reachable}}<span class="pill pill-ok">ok</span>{{else}}<span class="pill pill-fail">down</span>{{end}}</td>
-            <td>{{if $d.Chain.Synced}}<span class="pill pill-ok">ok</span>{{else}}<span class="pill pill-mute">—</span>{{end}}</td>
-            <td class="mono text-xs">{{$d.Chain.NetworkID}}{{if $d.Chain.ChainID}} <span class="muted">(chainid {{$d.Chain.ChainID}})</span>{{end}}</td>
-            <td class="mono text-xs muted">{{$d.Chain.Version}}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="snapshot-line" style="margin-top:.5rem">Served by the embedded Lantern node — no external RPC (zero-Glif).</div>
-  </div>
-
-  <div class="card">
-    <h2>
-      <svg style="color:#a78bfa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12a3 3 0 1 0 6 0 3 3 0 0 0-6 0zM3 12h4m10 0h4M12 3v4m0 10v4"/></svg>
-      Chain node network
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+      Prove tasks · 24h
     </h2>
     <div class="row">
-      <div>
-        <div class="stat-num text-brand glow">{{$d.Chain.HeadEpoch}}</div>
-        <div class="stat-label">epoch</div>
-      </div>
-      <div>
-        <div class="stat-num">{{$d.Chain.Peers}}</div>
-        <div class="stat-label">peers</div>
-      </div>
-      <div>
-        <div class="stat-num">{{$d.Chain.PendingTxCnt}}</div>
-        <div class="stat-label">pending tx</div>
-      </div>
+      <div><div class="stat-num text-ok">{{$d.Stats.RecentProveSuccess24}}</div><div class="stat-label">task ran</div></div>
+      <div><div class="stat-num text-fail">{{$d.Stats.RecentProveFailed24}}</div><div class="stat-label">task failed</div></div>
+      <div class="ml-auto"><a href="/tasks" class="btn btn-ghost btn-xs">View tasks →</a></div>
     </div>
-    <div class="snapshot-line" style="margin-top:.5rem">Embedded libp2p node · {{$d.Chain.NetworkID}}</div>
-  </div>
-</section>
-
-<section class="grid grid-2">
-  <div class="card">
-    <h2>
-      <svg style="color:#34d399" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
-      Prove tasks, last 24h
-    </h2>
-    <div class="row">
-      <div>
-        <div class="stat-num text-emerald">{{$d.Stats.RecentProveSuccess24}}</div>
-        <div class="stat-label">task ran</div>
-      </div>
-      <div>
-        <div class="stat-num text-rose">{{$d.Stats.RecentProveFailed24}}</div>
-        <div class="stat-label">task failed</div>
-      </div>
-      <div class="stat-sub" style="flex-basis:100%;margin-top:.25rem">Task ran = proof generated &amp; broadcast. On-chain landing is per-dataset on the Datasets page (Last proven).</div>
-      <div class="ml-auto">
-        <a href="/tasks" class="btn btn-ghost btn-xs">View tasks →</a>
-      </div>
-    </div>
+    <div class="stat-sub mt-4">Task ran = proof generated &amp; broadcast. On-chain landing is per-dataset on the Datasets page.</div>
   </div>
 
   <div class="card">
     <h2>
-      <svg style="color:#3b82f6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
       Scheduler health
     </h2>
     <div class="row">
-      <div>
-        <div class="stat-num">{{$d.Stats.TasksRunningNow}}</div>
-        <div class="stat-label">running</div>
-      </div>
-      <div>
-        <div class="stat-num">{{$d.Stats.TasksUnowned}}</div>
-        <div class="stat-label">queued</div>
-      </div>
-      <div class="ml-auto">
-        <a href="/tasks" class="btn btn-ghost btn-xs">View tasks →</a>
-      </div>
+      <div><div class="stat-num">{{$d.Stats.TasksRunningNow}}</div><div class="stat-label">running</div></div>
+      <div><div class="stat-num">{{$d.Stats.TasksUnowned}}</div><div class="stat-label">queued</div></div>
+      <div class="ml-auto"><a href="/tasks" class="btn btn-ghost btn-xs">View tasks →</a></div>
     </div>
   </div>
 </section>
 
 <section class="card">
   <h2>Quick actions</h2>
-  <div class="grid grid-4">
+  <div class="grid grid-4" style="margin-bottom:0">
     <a href="/upload" class="card-action">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 10l5-5 5 5M12 5v14"/></svg>
-      <div>
-        <div class="ca-title">Upload a piece</div>
-        <div class="ca-sub">Streaming upload with progress</div>
-      </div>
+      <div><div class="ca-title">Upload a piece</div><div class="ca-sub">Streaming upload with progress</div></div>
     </a>
     <a href="/terminal" class="card-action">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm3 5l3 3-3 3m6 0h4"/></svg>
-      <div>
-        <div class="ca-title">Open terminal</div>
-        <div class="ca-sub">Allowlisted curio-core commands</div>
-      </div>
+      <div><div class="ca-title">Open terminal</div><div class="ca-sub">Allowlisted curio-core commands</div></div>
     </a>
     <a href="/storage" class="card-action">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7l2-3h14l2 3M3 7v12a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7M3 7h18M7 11h2m4 0h4"/></svg>
-      <div>
-        <div class="ca-title">Storage paths</div>
-        <div class="ca-sub">Disk usage + stash directory</div>
-      </div>
+      <div><div class="ca-title">Storage paths</div><div class="ca-sub">Disk usage + stash directory</div></div>
     </a>
     <a href="/wallets" class="card-action">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h15a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7zm0 0V6a2 2 0 0 1 2-2h13M17 14h.01"/></svg>
-      <div>
-        <div class="ca-title">Wallets</div>
-        <div class="ca-sub">Balances, send FIL/USDFC</div>
-      </div>
+      <div><div class="ca-title">Wallets</div><div class="ca-sub">Balances, send FIL/USDFC</div></div>
     </a>
   </div>
 </section>
 
-<div class="snapshot-line">Snapshot: {{$d.NowUTC}} · auto-refresh 30s</div>
-
+<div class="snapshot-line">Snapshot {{$d.NowUTC}} · auto-refresh 30s</div>
 <script>setTimeout(function(){window.location.reload()},30000);</script>
 {{template "_close_body" .}}{{end}}

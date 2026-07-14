@@ -63,6 +63,12 @@ type Server struct {
 	build     BuildInfo
 	usdfcAddr common.Address
 	payAddr   common.Address
+
+	// price is a cached FIL/USD rate used only for cosmetic USD
+	// annotations; fin is a cached projection of incoming rail income.
+	// Both degrade gracefully and never block a page render.
+	price *priceCache
+	fin   *finRollupCache
 }
 
 // Config is the runtime knobs the dashboard cares about.
@@ -116,10 +122,12 @@ func NewServer(db harmonyquery.DBInterface, cfg Config) (*Server, error) {
 		}
 	}
 	s := &Server{
-		db:   db,
-		eth:  cfg.EthClient,
-		tmpl: tmpl,
-		cfg:  cfg,
+		db:    db,
+		eth:   cfg.EthClient,
+		tmpl:  tmpl,
+		cfg:   cfg,
+		price: newPriceCache(),
+		fin:   newFinRollupCache(),
 		build: BuildInfo{
 			Version: cfg.Version,
 			Network: cfg.Network,
@@ -206,9 +214,12 @@ func (s *Server) render(w http.ResponseWriter, name string, title string, active
 }
 
 type overviewData struct {
-	NowUTC string
-	Chain  overviewChain
-	Stats  overviewStats
+	NowUTC    string
+	Chain     overviewChain
+	Stats     overviewStats
+	Price     filPrice
+	Fin       finRollup
+	Readiness readinessReport
 }
 
 type overviewChain struct {
@@ -339,11 +350,23 @@ func (s *Server) collectOverview(ctx context.Context) overviewData {
 	out.Stats.TasksRunningNow = tasksRunning
 	out.Stats.TasksUnowned = tasksUnowned
 
+	// Cosmetic FIL/USD rate + cached income projection + server-verified
+	// readiness. All best-effort; each degrades to empty/unknown so the
+	// overview never fails on a price API hiccup or unwired eth client.
+	if s.price != nil {
+		out.Price = s.price.Get(ctx)
+	}
+	if s.fin != nil {
+		out.Fin = s.fin.get(ctx, s.computeFinRollup)
+	}
+	out.Readiness = s.computeReadiness(ctx, out)
+
 	return out
 }
 
 type walletsData struct {
 	Wallets []walletRow
+	Price   filPrice
 }
 
 type walletRow struct {
@@ -352,10 +375,16 @@ type walletRow struct {
 	IsPDP   bool
 	FILWei  string // decimal display, 18 decimals, empty if unknown
 	USDFC   string // decimal display, 18 decimals, empty if unknown
+	FILUsd  string // cosmetic FIL->USD annotation, empty when no rate
 }
 
 func (s *Server) handleWallets(w http.ResponseWriter, r *http.Request) {
 	d := walletsData{}
+	var price filPrice
+	if s.price != nil {
+		price = s.price.Get(r.Context())
+	}
+	d.Price = price
 	var rows []struct {
 		Address string `db:"address"`
 		Role    string `db:"role"`
@@ -363,14 +392,18 @@ func (s *Server) handleWallets(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.SelectI(r.Context(), &rows,
 		`SELECT address, role FROM eth_keys ORDER BY role, address`); err == nil {
 		for _, row := range rows {
-			filBal, usdfcBal := s.readBalances(r.Context(), row.Address)
-			d.Wallets = append(d.Wallets, walletRow{
+			filBal, usdfcBal, filWei := s.readBalances(r.Context(), row.Address)
+			wr := walletRow{
 				Address: row.Address,
 				Role:    row.Role,
 				IsPDP:   row.Role == "pdp",
 				FILWei:  filBal,
 				USDFC:   usdfcBal,
-			})
+			}
+			if price.USD > 0 && filWei != nil && filWei.Sign() > 0 {
+				wr.FILUsd = usdMoney(usdFromWei(filWei, price.USD))
+			}
+			d.Wallets = append(d.Wallets, wr)
 		}
 	}
 	s.render(w, "wallets", "Wallets", "wallets", d)
@@ -379,15 +412,16 @@ func (s *Server) handleWallets(w http.ResponseWriter, r *http.Request) {
 // readBalances reads the native FIL balance + USDFC ERC-20 balance for
 // an eth address. Returns ("", "") if the eth client isn't wired or
 // the address is unparseable.
-func (s *Server) readBalances(ctx context.Context, addr string) (filDec, usdfcDec string) {
+func (s *Server) readBalances(ctx context.Context, addr string) (filDec, usdfcDec string, filWei *big.Int) {
 	if s.eth == nil || !common.IsHexAddress(addr) {
-		return "", ""
+		return "", "", nil
 	}
 	a := common.HexToAddress(addr)
 	ctx2, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
 	if fil, err := s.eth.BalanceAt(ctx2, a, nil); err == nil && fil != nil {
 		filDec = decimal18(fil)
+		filWei = fil
 	}
 	if s.usdfcAddr != (common.Address{}) {
 		// balanceOf(address) selector 0x70a08231
@@ -1024,6 +1058,63 @@ func funcMap() template.FuncMap {
 			return intPart.String() + "." + fracStr
 		},
 		"add": func(a, b int) int { return a + b },
+		"stateClass": func(s readyState) string { return string(s) },
+		"stateIcon": func(s readyState) string {
+			switch s {
+			case readyOK:
+				return "✓"
+			case readyWarn:
+				return "!"
+			case readyFail:
+				return "✕"
+			default:
+				return "?"
+			}
+		},
+		"dec6": func(s string) string {
+			// Format an 18-decimal wei string with at most 6 fractional
+			// digits (trailing zeros trimmed). For tiny non-zero rates it
+			// avoids dumping a raw 18-digit float into the UI.
+			if s == "" || s == "0" {
+				return "0"
+			}
+			n, ok := new(big.Int).SetString(s, 10)
+			if !ok {
+				return s
+			}
+			eighteen := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+			intPart := new(big.Int).Quo(n, eighteen)
+			fracPart := new(big.Int).Mod(n, eighteen)
+			if fracPart.Sign() == 0 {
+				return intPart.String()
+			}
+			fracStr := fmt.Sprintf("%018s", fracPart.String())
+			if len(fracStr) > 6 {
+				fracStr = fracStr[:6]
+			}
+			fracStr = strings.TrimRight(fracStr, "0")
+			if fracStr == "" {
+				return intPart.String()
+			}
+			return intPart.String() + "." + fracStr
+		},
+		"filSpot": func(p filPrice) string {
+			if p.USD <= 0 {
+				return ""
+			}
+			return fmt.Sprintf("$%.3f", p.USD)
+		},
+		"usdOf": func(p filPrice, dec string) string {
+			if p.USD <= 0 || dec == "" || dec == "0" {
+				return ""
+			}
+			n, ok := new(big.Float).SetString(dec)
+			if !ok {
+				return ""
+			}
+			f, _ := n.Float64()
+			return usdMoney(f * p.USD)
+		},
 		"durMS": func(ms int64) string {
 			if ms < 0 {
 				return "—"

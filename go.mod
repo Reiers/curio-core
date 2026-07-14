@@ -18,6 +18,7 @@ require (
 	github.com/ipfs/go-log/v2 v2.9.2
 	github.com/yugabyte/pgx/v5 v5.7.6-yb-1
 	golang.org/x/crypto v0.51.0
+	golang.org/x/sync v0.20.0
 	modernc.org/sqlite v1.50.1
 )
 
@@ -286,7 +287,6 @@ require (
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260409153401-be6f6cb8b1fa // indirect
 	golang.org/x/text v0.37.0 // indirect
