@@ -1057,7 +1057,7 @@ func funcMap() template.FuncMap {
 			fracStr = strings.TrimRight(fracStr, "0")
 			return intPart.String() + "." + fracStr
 		},
-		"add": func(a, b int) int { return a + b },
+		"add":        func(a, b int) int { return a + b },
 		"stateClass": func(s readyState) string { return string(s) },
 		"stateIcon": func(s readyState) string {
 			switch s {

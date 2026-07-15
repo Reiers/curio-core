@@ -82,9 +82,9 @@ func TestRenderPreview(t *testing.T) {
 		Price: price,
 		Fin: finRollup{
 			ActiveRails:  2,
-			RatePerEpoch: "3472222222222222",       // ~0.00347 USDFC
-			RatePerDay:   "10000000000000000000",    // 10 USDFC
-			RatePer30d:   "300000000000000000000",   // 300 USDFC
+			RatePerEpoch: "3472222222222222",      // ~0.00347 USDFC
+			RatePerDay:   "10000000000000000000",  // 10 USDFC
+			RatePer30d:   "300000000000000000000", // 300 USDFC
 			Fresh:        true,
 		},
 	}

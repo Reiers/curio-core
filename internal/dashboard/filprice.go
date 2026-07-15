@@ -65,10 +65,10 @@ func (p *priceCache) fetcher() func(ctx context.Context) (float64, error) {
 // have no usable rate (never fetched, or last fetch failed with no prior
 // value); callers should hide the USD column in that case.
 type filPrice struct {
-	USD     float64
-	Fresh   bool
-	AsOf    time.Time
-	Err     string
+	USD   float64
+	Fresh bool
+	AsOf  time.Time
+	Err   string
 }
 
 // Get returns a cached rate when fresh, otherwise triggers a single
