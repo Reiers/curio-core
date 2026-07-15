@@ -151,16 +151,16 @@ func TestBuildTaskRegistry_Standalone(t *testing.T) {
 // upstream Curio GA-blocker:
 //
 //   - PDPv0_PieceGC  -> filecoin-project/curio#1303: the 24h PieceGC window
-//                       destroys uploaded-but-uncommitted pieces when commits
-//                       lag uploads. Not registered => cannot happen here.
+//     destroys uploaded-but-uncommitted pieces when commits
+//     lag uploads. Not registered => cannot happen here.
 //   - PDPv0_Cleanup  -> filecoin-project/curio#1296: an un-includable
-//                       cleanupPieces tx wedges the sender nonce queue and
-//                       permanently breaks ProvPeriod after restart. The
-//                       feature is absent => no such tx is ever produced.
+//     cleanupPieces tx wedges the sender nonce queue and
+//     permanently breaks ProvPeriod after restart. The
+//     feature is absent => no such tx is ever produced.
 //   - PDPv0_IPNI     -> filecoin-project/curio#1291: PDPv0_IPNI Max(50)
-//                       storms YugabyteDB with 40001 serialization conflicts
-//                       and strands piecerefs. Not registered (and SQLite has
-//                       no 40001 class anyway).
+//     storms YugabyteDB with 40001 serialization conflicts
+//     and strands piecerefs. Not registered (and SQLite has
+//     no 40001 class anyway).
 //
 // If a future fork bump or refactor silently re-registers any of these, this
 // test fails LOUDLY. Re-enabling one must be a deliberate, reviewed edit that
@@ -172,7 +172,7 @@ func TestRegistry_GABlockerTasksStayUnregistered(t *testing.T) {
 	}
 
 	forbidden := []struct {
-		name    string
+		name     string
 		upstream string
 	}{
 		{tasknames.PDPv0_PieceGC, "filecoin-project/curio#1303 (PieceGC destroys uncommitted pieces)"},

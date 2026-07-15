@@ -7,6 +7,7 @@
       <p>eth_keys backing the proof loop, payment settlement, and signing.</p>
     </div>
     <div class="flex">
+      {{if filSpot $d.Price}}<span class="pill pill-mute" title="FIL/USD spot, cosmetic only{{if not $d.Price.Fresh}} (cached){{end}}">FIL {{filSpot $d.Price}}</span>{{end}}
       <a href="/terminal?prefill=wallet+new" class="btn btn-ghost">+ New wallet</a>
       <a href="/terminal?prefill=wallet+import" class="btn btn-ghost">Import key</a>
     </div>
@@ -26,7 +27,7 @@
         <tr>
           <td class="mono">{{.Address}}</td>
           <td>{{if .IsPDP}}<span class="pill pill-brand">pdp</span>{{else}}<span class="pill pill-mute">{{.Role}}</span>{{end}}</td>
-          <td class="right mono">{{if .FILWei}}{{.FILWei}}{{else}}<span class="dim">—</span>{{end}}</td>
+          <td class="right mono">{{if .FILWei}}{{.FILWei}}{{if .FILUsd}}<span class="usd usd-faint">≈{{.FILUsd}}</span>{{end}}{{else}}<span class="dim">—</span>{{end}}</td>
           <td class="right mono">{{if .USDFC}}{{.USDFC}}{{else}}<span class="dim">—</span>{{end}}</td>
         </tr>
         {{end}}
