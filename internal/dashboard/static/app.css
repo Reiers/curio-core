@@ -489,3 +489,51 @@ label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.11em; co
 .divider { height: 1px; background: var(--border-subtle); margin: 16px 0; }
 
 .snapshot-line { margin-top: 22px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-faint); }
+
+/* ---- Setup Guide (server-verified PDP walkthrough) ---- */
+.guide-banner { display: flex; align-items: center; gap: 16px; }
+.guide-banner h2 { display: block; }
+.guide-banner.ready { box-shadow: inset 0 0 0 1px var(--ok-dim), var(--shadow-1, none); }
+.guide-banner.attention { box-shadow: inset 0 0 0 1px var(--warn-dim), var(--shadow-1, none); }
+.guide-banner .h2-right { margin-left: auto; }
+
+.guide-steps { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.guide-step { display: flex; gap: 16px; align-items: flex-start; transition: border-color .15s, box-shadow .15s; }
+.guide-step.is-next { box-shadow: inset 0 0 0 1px var(--warn-dim); border-color: var(--warn); }
+.guide-step.ok.is-next { box-shadow: none; }
+.guide-step.locked { opacity: 0.55; }
+
+.step-rail { display: flex; flex-direction: column; align-items: center; padding-top: 2px; }
+.step-num {
+  width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-family: 'JetBrains Mono', monospace; font-weight: 700;
+  font-size: 13px; flex-shrink: 0; background: var(--n-700); color: var(--text-muted);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+.step-num.ok   { background: var(--ok-dim);   color: var(--ok);   box-shadow: inset 0 0 0 1px var(--ok); }
+.step-num.warn { background: var(--warn-dim); color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn-dim); }
+.step-num.fail { background: var(--fail-dim); color: var(--fail); box-shadow: inset 0 0 0 1px var(--fail-dim); }
+
+.step-body { flex: 1; min-width: 0; }
+.step-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.step-head h3 { margin: 0; font-size: 14.5px; font-weight: 650; color: var(--text-primary); }
+.step-tags { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.guide-why { margin: 8px 0 0; font-size: 13px; line-height: 1.55; color: var(--text-secondary); }
+.guide-detail { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+
+.guide-actions { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.cmd-box {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: var(--surface-base); border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--border-default); padding: 8px 10px;
+}
+.cmd-box code { font-size: 12px; color: var(--brand-bright); white-space: nowrap; overflow-x: auto; }
+.cmd-box .cmd-label { margin-left: auto; font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.copy-btn {
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .06em; padding: 3px 8px; border-radius: var(--radius-xs); cursor: pointer;
+  background: transparent; color: var(--text-secondary); border: none;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.copy-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+.copy-btn.ok { color: var(--ok); box-shadow: inset 0 0 0 1px var(--ok); }

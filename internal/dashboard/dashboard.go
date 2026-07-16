@@ -147,6 +147,7 @@ func NewServer(db harmonyquery.DBInterface, cfg Config) (*Server, error) {
 // Routes mounts the dashboard routes on r.
 func (s *Server) Routes(r chi.Router) {
 	r.Get("/", s.handleOverview)
+	r.Get("/guide", s.handleGuide)
 	r.Get("/wallets", s.handleWallets)
 	r.Get("/datasets", s.handleDatasets)
 	r.Get("/rails", s.handleRails)
@@ -262,6 +263,15 @@ func (s *Server) handleAPIOverview(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(d)
+}
+
+// handleGuide renders the server-verified PDP setup walkthrough. It reuses
+// the same overview snapshot the readiness scorecard is built from, so the
+// guide can never disagree with the Overview page.
+func (s *Server) handleGuide(w http.ResponseWriter, r *http.Request) {
+	ov := s.collectOverview(r.Context())
+	g := s.computeGuide(r.Context(), ov)
+	s.render(w, "guide", "Setup Guide", "guide", g)
 }
 
 func (s *Server) collectOverview(ctx context.Context) overviewData {

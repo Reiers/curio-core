@@ -114,6 +114,7 @@ func TestRenderPreview(t *testing.T) {
 
 	render("overview", "Overview", "overview", ov)
 	render("wallets", "Wallets", "wallets", wallets)
+	render("guide", "Setup Guide", "guide", s.computeGuide(context.Background(), ov))
 
 	t.Logf("wrote preview to %s", outDir)
 }

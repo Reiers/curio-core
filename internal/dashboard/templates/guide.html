@@ -1,0 +1,83 @@
+{{define "guide"}}{{template "_head" .}}{{template "_open_body" .}}
+{{$g := .Data}}
+
+<!-- overall banner: ready vs how-many-left -->
+{{if $g.AllReady}}
+<section class="card guide-banner ready">
+  <span class="check-icon ok" style="width:34px;height:34px;font-size:16px">✓</span>
+  <div>
+    <h2 style="margin:0">This SP is ready to serve PDP</h2>
+    <p class="muted text-sm" style="margin:.25rem 0 0">All {{$g.Total}} prerequisites are satisfied. Proofs, payments, and uploads are good to go.</p>
+  </div>
+  <span class="h2-right"><span class="pill pill-ok">{{$g.OK}}/{{$g.Total}} ready</span></span>
+</section>
+{{else}}
+<section class="card guide-banner attention">
+  <span class="check-icon warn" style="width:34px;height:34px;font-size:16px">!</span>
+  <div>
+    <h2 style="margin:0">Setup in progress — {{$g.OK}} of {{$g.Total}} steps done</h2>
+    {{if $g.Next}}
+    <p class="muted text-sm" style="margin:.25rem 0 0">Next: <strong class="text-warn">step {{$g.Next.Num}} — {{$g.Next.Title}}</strong></p>
+    {{end}}
+  </div>
+  <span class="h2-right"><span class="pill pill-warn">{{$g.OK}}/{{$g.Total}} ready</span></span>
+</section>
+{{end}}
+
+<!-- ordered walkthrough -->
+<section class="guide-steps">
+  {{range $g.Steps}}
+  <div class="card guide-step {{stateClass .State}}{{if .Locked}} locked{{end}}{{if and $g.Next (eq .Num $g.Next.Num)}} is-next{{end}}">
+    <div class="step-rail">
+      <span class="step-num {{stateClass .State}}">
+        {{if .Done}}✓{{else if .Locked}}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>{{else}}{{.Num}}{{end}}
+      </span>
+    </div>
+    <div class="step-body">
+      <div class="step-head">
+        <h3>{{.Title}}</h3>
+        <div class="step-tags">
+          {{if .Critical}}<span class="check-crit">required</span>{{else}}<span class="pill pill-mute">recommended</span>{{end}}
+          {{if .Done}}<span class="pill pill-ok">done</span>
+          {{else if .Locked}}<span class="pill pill-mute">locked</span>
+          {{else if eq .State "warn"}}<span class="pill pill-warn">attention</span>
+          {{else if eq .State "fail"}}<span class="pill pill-fail">action needed</span>
+          {{else}}<span class="pill pill-mute">unknown</span>{{end}}
+        </div>
+      </div>
+      <p class="guide-why">{{.Why}}</p>
+      {{if .Detail}}<div class="guide-detail"><span class="dot-status {{stateClass .State}}"></span><span class="mono text-xs">{{.Detail}}</span></div>{{end}}
+      {{if .Actions}}
+      <div class="guide-actions">
+        {{range .Actions}}
+          {{if .Cmd}}
+          <div class="cmd-box">
+            <code class="mono">{{.Cmd}}</code>
+            <button class="copy-btn" type="button" data-cmd="{{.Cmd}}" title="Copy">copy</button>
+            <span class="cmd-label">{{.Label}}</span>
+          </div>
+          {{else if .Href}}
+          <a href="{{.Href}}" class="btn btn-ghost btn-xs">{{.Label}} →</a>
+          {{end}}
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+</section>
+
+<div class="snapshot-line">Server-verified {{if $g.AllReady}}· all checks live{{else}}· work top-to-bottom{{end}} · auto-refresh 30s</div>
+
+<script>
+document.addEventListener('click', function(e){
+  var b = e.target.closest('.copy-btn');
+  if(!b) return;
+  var cmd = b.getAttribute('data-cmd') || '';
+  var done = function(){ var t=b.textContent; b.textContent='copied'; b.classList.add('ok'); setTimeout(function(){b.textContent=t;b.classList.remove('ok');},1200); };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(cmd).then(done, done); }
+  else { var ta=document.createElement('textarea'); ta.value=cmd; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(_){} document.body.removeChild(ta); done(); }
+});
+setTimeout(function(){window.location.reload()},30000);
+</script>
+{{template "_close_body" .}}{{end}}
