@@ -32,7 +32,11 @@ jobs:
           # (1.26 gofmt drops redundant parens around != comparisons),
           # which produced spurious gofmt-drift failures.
           go-version: '1.26.x'
-          cache: true
+          # Self-hosted runners persist ~/go/pkg/mod across runs on
+          # local disk, so we skip actions/cache's GitHub-side cache
+          # service. Avoids the flaky 1.6 GB round-trip to Azure blob
+          # storage over our home WiFi (EAI_AGAIN DNS failures).
+          cache: false
 
       - name: Configure git for private Reiers deps
         env:
