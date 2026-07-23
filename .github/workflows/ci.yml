@@ -1,5 +1,11 @@
 # Per-push CI for curio-core. Runs on every push to main + every PR.
 # Mirrors Reiers/lantern's CI workflow.
+#
+# Runner: self-hosted on the Reiers home cluster (node1-curio-core,
+# 10.20.0.11, Ubuntu 26.04, 6c/12t E5-1650v2, 60G RAM). Registered
+# 2026-07-23. Go 1.26.4 pre-installed. Same physical node as the
+# lantern runner but a separate runner instance so builds don't
+# block each other. Auto-restarts under user systemd (linger on).
 
 name: ci
 
@@ -7,12 +13,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build-test:
     name: build + test + vet + fmt
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: [self-hosted, linux, x64, node1, curio-core]
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
